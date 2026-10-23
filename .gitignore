@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dist-electron/
+release/
+*.tsbuildinfo
+
+# cloned reference repos (kept locally, not committed)
+_reference/
+
+# env & secrets
+.env
+.env.*
+*.local
+
+# scratch issue tracker (local only)
+.scratch/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+
+# electron-vite output
+app/out/
