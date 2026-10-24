@@ -37,6 +37,8 @@ export function createLocalFallbackApi(): MitraApi {
     },
     hideOverlay: () => {},
     onSessionEvent: () => () => {},
+    onOverlayShown: () => () => {},
+    onOverlayHidden: () => () => {},
   };
 }
 

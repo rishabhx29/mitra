@@ -14,20 +14,16 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@bolna/web-call": "^3.0.1",
-    "@pixiv/three-vrm": "^3.0.0",
-    "@react-three/drei": "^10.0.0",
-    "@react-three/fiber": "^9.0.0",
-    "@react-three/postprocessing": "^3.0.0",
     "express": "^5.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.182.0",
-    "wawa-lipsync": "latest",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@bolna/web-call": "^3.0.1",
+    "@pixiv/three-vrm": "^3.0.0",
     "@playwright/test": "^1.50.0",
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "@react-three/postprocessing": "^3.0.0",
     "@tailwindcss/vite": "^4.0.0",
     "@types/express": "^5.0.0",
     "@types/react": "^19.0.0",
@@ -38,9 +34,13 @@
     "electron-builder": "^26.0.0",
     "electron-vite": "^3.0.0",
     "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0",
+    "three": "^0.182.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "wawa-lipsync": "latest"
   },
   "allowScripts": {
     "electron@39.8.10": true,

@@ -4,6 +4,7 @@ import type { Settings, SessionState, TranscriptEntry } from './types';
 export const IPC = {
   toggleOverlay: 'mitra:toggle-overlay',
   overlayShown: 'mitra:overlay-shown',
+  overlayHidden: 'mitra:overlay-hidden',
   sessionEvent: 'mitra:session-event',
   getSettings: 'mitra:get-settings',
   setSettings: 'mitra:set-settings',
@@ -20,6 +21,10 @@ export interface MitraApi {
   setSettings(patch: Partial<Settings>): Promise<Settings>;
   hideOverlay(): void;
   onSessionEvent(cb: (e: SessionEvent) => void): () => void;
+  /** Fired when the main process summons the overlay (hotkey/tray) — start a fresh session. */
+  onOverlayShown(cb: () => void): () => void;
+  /** Fired when the overlay is hidden (hotkey/Escape/app switch) — stop the session. */
+  onOverlayHidden(cb: () => void): () => void;
 }
 
 declare global {

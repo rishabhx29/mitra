@@ -82,10 +82,13 @@ export function SessionController({ settings, devMode = false }: SessionControll
       provider.onState(setState);
       provider.onTranscript((entry) => setEntries((prev) => [...prev.slice(-MAX_ENTRIES + 1), entry]));
       if (audioElRef.current) provider.attachAudio(audioElRef.current);
-      // Mounted with the overlay window; Electron's default autoplay policy lets
-      // the SDK's audio play without a click (browser dev may not — the orb click
-      // retries, and any SDK autoplay_blocked error says so).
-      provider.start({ language }).catch(() => setState('error'));
+      // With the shell present, the session lifecycle is summon-driven: the overlay
+      // window is created hidden at boot, and overlay-shown/hidden IPC (hotkey) is
+      // what starts/stops sessions — nothing runs invisibly. Plain-browser dev
+      // (no preload) keeps the old mount-start so the harness works without Electron.
+      if (!window.mitra) {
+        provider.start({ language }).catch(() => setState('error'));
+      }
     });
     return () => {
       disposed = true;
@@ -96,6 +99,24 @@ export function SessionController({ settings, devMode = false }: SessionControll
       if (p) void p.stop();
     };
   }, [language]);
+
+  // ---- summon-driven sessions: hotkey summon starts fresh, dismiss stops ----
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.mitra) return;
+    const offShown = window.mitra.onOverlayShown(() => {
+      const p = providerRef.current;
+      if (!p) return;
+      setEntries([]); // each summon is a fresh conversation
+      p.start({ language: languageRef.current }).catch(() => setState('error'));
+    });
+    const offHidden = window.mitra.onOverlayHidden(() => {
+      void providerRef.current?.stop();
+    });
+    return () => {
+      offShown();
+      offHidden();
+    };
+  }, []);
 
   // ---- 60fps amplitude merge: analyser ∨ mock envelope ∨ Bolna volume-level ----
   useEffect(() => {

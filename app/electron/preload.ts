@@ -11,6 +11,16 @@ const api: MitraApi = {
     ipcRenderer.on(IPC.sessionEvent, listener);
     return () => ipcRenderer.removeListener(IPC.sessionEvent, listener);
   },
+  onOverlayShown: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on(IPC.overlayShown, listener);
+    return () => ipcRenderer.removeListener(IPC.overlayShown, listener);
+  },
+  onOverlayHidden: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on(IPC.overlayHidden, listener);
+    return () => ipcRenderer.removeListener(IPC.overlayHidden, listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('mitra', api);

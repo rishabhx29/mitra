@@ -121,13 +121,17 @@ export function createOverlayController(deps: {
       win.webContents.send(IPC.overlayShown);
     },
     hide(): void {
-      liveWindow()?.hide();
+      const win = liveWindow();
+      if (!win) return;
+      win.hide();
+      win.webContents.send(IPC.overlayHidden);
     },
     toggle(): void {
       const win = liveWindow();
       if (!win) return;
       if (win.isVisible()) {
         win.hide();
+        win.webContents.send(IPC.overlayHidden);
         return;
       }
       win.showInactive();
