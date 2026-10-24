@@ -33,6 +33,30 @@ const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }>
 
 const TOAST_MS = 1800;
 
+/**
+ * Electron's default is to NAVIGATE the window when a file is dropped outside a
+ * handled dropzone — the #1 way "drag my .vrm in" turns into a blank/garbage page.
+ * Swallow every unhandled drag at the window level; the styled dropzone in
+ * PersonaPicker still receives its events (stopPropagation-free, they just also
+ * hit this guard). Same guard lives in the fullscreen viewer.
+ */
+function useDndNavigationGuard(): void {
+  useEffect(() => {
+    const swallow = (e: DragEvent): void => {
+      // Only intercept drags we didn't opt into: if the target is inside the
+      // avatar dropzone, its own handlers already preventDefault — re-doing it
+      // here is harmless and keeps the window from navigating regardless.
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', swallow);
+    window.addEventListener('drop', swallow);
+    return () => {
+      window.removeEventListener('dragover', swallow);
+      window.removeEventListener('drop', swallow);
+    };
+  }, []);
+}
+
 export default function SettingsApp() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [persisted, setPersisted] = useState(true);
@@ -40,6 +64,7 @@ export default function SettingsApp() {
   const [toast, setToast] = useState<{ tone: 'ok' | 'err'; key: string } | null>(null);
   const apiRef = useRef<{ api: ReturnType<typeof resolveMitraApi>['api'] } | null>(null);
   const toastTimer = useRef<number | null>(null);
+  useDndNavigationGuard();
 
   useEffect(() => {
     const resolved = resolveMitraApi();

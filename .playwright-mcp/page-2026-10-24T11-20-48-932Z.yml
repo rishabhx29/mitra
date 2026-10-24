@@ -1,0 +1,69 @@
+- generic [ref=f2e2]:
+  - generic [ref=f2e3]:
+    - link "Skip to content" [ref=f2e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=f2e9]:
+      - heading "Navigation Menu" [level=2] [ref=f2e10]
+      - generic [ref=f2e12]:
+        - button "Toggle navigation" [ref=f2e14] [cursor=pointer]
+        - link "Homepage" [ref=f2e18] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f2e21]:
+          - link "Sign in" [ref=f2e22] [cursor=pointer]:
+            - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fsemperai%2Famica%2Ftree%2Fmain%2Fpublic%2Fvrm
+          - button "Appearance settings" [ref=f2e25] [cursor=pointer]
+  - main [ref=f2e32]:
+    - generic "Global navigation menu" [ref=f2e35]:
+      - navigation "Breadcrumbs" [ref=f2e38]:
+        - list [ref=f2e39]:
+          - listitem [ref=f2e40]:
+            - link "semperai" [ref=f2e41] [cursor=pointer]:
+              - /url: /semperai
+          - listitem [ref=f2e43]:
+            - link "amica" [ref=f2e44] [cursor=pointer]:
+              - /url: /semperai/amica
+      - heading "Repository navigation" [level=2] [ref=f2e47]
+      - navigation "Repository" [ref=f2e48]:
+        - list [ref=f2e49]:
+          - listitem [ref=f2e50]:
+            - link "Code" [ref=f2e51] [cursor=pointer]:
+              - /url: /semperai/amica
+          - listitem [ref=f2e53]:
+            - link "Issues (2)" [ref=f2e54] [cursor=pointer]:
+              - /url: /semperai/amica/issues
+              - generic [ref=f2e55]: Issues
+              - generic [ref=f2e56]:
+                - generic [aria-hidden] [ref=f2e57]: "2"
+                - generic [ref=f2e58]: (2)
+          - listitem [ref=f2e59]:
+            - link "Pull requests (17)" [ref=f2e60] [cursor=pointer]:
+              - /url: /semperai/amica/pulls
+              - generic [ref=f2e61]: Pull requests
+              - generic [ref=f2e62]:
+                - generic [aria-hidden] [ref=f2e63]: "17"
+                - generic [ref=f2e64]: (17)
+          - listitem [ref=f2e65]:
+            - link "Discussions" [ref=f2e66] [cursor=pointer]:
+              - /url: /semperai/amica/discussions
+          - listitem [ref=f2e68]:
+            - link "Actions" [ref=f2e69] [cursor=pointer]:
+              - /url: /semperai/amica/actions
+          - listitem [ref=f2e71]:
+            - link "Projects" [ref=f2e72] [cursor=pointer]:
+              - /url: /semperai/amica/projects
+          - listitem [ref=f2e74]:
+            - link "Security and quality" [ref=f2e75] [cursor=pointer]:
+              - /url: /semperai/amica/security
+          - listitem [ref=f2e77]:
+            - link "Insights" [ref=f2e78] [cursor=pointer]:
+              - /url: /semperai/amica/pulse
+        - button "More items" [ref=f2e82] [cursor=pointer]:
+          - generic [ref=f2e85]:
+            - text: More
+            - generic [ref=f2e86]: items
+    - generic [ref=f2e100]:
+      - heading "Error loading page" [level=2] [ref=f2e105]
+      - paragraph [ref=f2e106]:
+        - generic [ref=f2e107]: An unexpected error occurred. Try reloading the page.
+      - link "Go to default branch" [ref=f2e109] [cursor=pointer]:
+        - /url: /semperai/amica?files=1

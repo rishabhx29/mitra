@@ -39,6 +39,8 @@ export const en: Record<string, string> = {
   'settings.persona.vrmDropHint':
     'Or browse your computer — the file is copied into Mitra’s app data, so your avatar is back on the next launch.',
   'settings.persona.vrmBrowse': 'Browse files',
+  'settings.persona.vrmFullscreen': 'Fullscreen',
+  'settings.persona.fsHint': 'Drag to orbit · Esc to close',
   'settings.persona.vrmUseSample': 'Use sample avatar',
   'settings.persona.vrmDropActive': 'Drop to load',
   'settings.persona.vrmWorking': 'Copying model…',

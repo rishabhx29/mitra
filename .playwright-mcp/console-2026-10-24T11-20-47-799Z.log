@@ -1,0 +1,15 @@
+[     747ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://github.com/semperai/amica/tree/main/public/vrm:0
+[    1068ms] [ERROR] React Router caught the following error during render TypeError: Cannot read properties of null (reading 'split')
+    at o (https://github.githubassets.com/assets/9k-9938b9e1b5d2f0d0.js:2:36411)
+    at Array.map (<anonymous>)
+    at M (https://github.githubassets.com/assets/9k-9938b9e1b5d2f0d0.js:2:4180)
+    at o (https://github.githubassets.com/assets/code-view-78021c04b029066e.js:2:59419)
+    at ix (https://github.githubassets.com/assets/react-dom-client-35b308126995de85.js:1:93841)
+    at uS (https://github.githubassets.com/assets/react-dom-client-35b308126995de85.js:1:118949)
+    at uw (https://github.githubassets.com/assets/react-dom-client-35b308126995de85.js:1:118611)
+    at uS (https://github.githubassets.com/assets/react-dom-client-35b308126995de85.js:1:118994)
+    at uw (https://github.githubassets.com/assets/react-dom-client-35b308126995de85.js:1:118611)
+    at uS (https://github.githubassets.com/assets/react-dom-client-35b308126995de85.js:1:118929) @ https://github.githubassets.com/assets/react-core-64258d9ba65c8c5a.js:3
+[    1172ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://github.com/semperai/amica/latest-commit/main/public/vrm:0
+[    1203ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://github.com/_global-navigation/payloads.json?can_toggle_site_admin_and_employee_status=0&is_admin_mode_on=0&is_ui_opted_out=0&show_ui_opt_out=0&v=8:0
+[    1352ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://github.com/semperai/amica/tree-commit-info/main/public/vrm:0

@@ -6,6 +6,7 @@ const api: MitraApi = {
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   setSettings: (patch) => ipcRenderer.invoke(IPC.setSettings, patch),
   hideOverlay: () => void ipcRenderer.send(IPC.hideOverlay),
+  toggleAvatarFullscreen: () => void ipcRenderer.send(IPC.toggleAvatarFullscreen),
   onSessionEvent: (cb: (e: SessionEvent) => void) => {
     const listener = (_e: unknown, ev: SessionEvent) => cb(ev);
     ipcRenderer.on(IPC.sessionEvent, listener);

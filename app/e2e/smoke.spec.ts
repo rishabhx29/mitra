@@ -270,6 +270,12 @@ test('terminal permission off → opencode intent gets the permission-denied rep
     settingsPage!.getByRole('switch', { name: 'Terminal & opencode' }),
   ).toHaveAttribute('aria-checked', 'false');
 
+  // The 12s listening-no-speech timeout (docs/DESIGN_BRIEF.md) may have already
+  // stopped test 4's session and auto-dismissed the overlay while this test was
+  // setting up — a real user would just press the hotkey again, so re-summon
+  // through the same e2e hook and wait for the fresh session before typing.
+  await emitMainChannel('mitra:e2e-show-overlay');
+  await expectOverlayVisible(true);
   await submitDevInput('open opencode and build me a portfolio site');
   // The bridge answers 403 {ok:false, summary:"Permission denied: terminal"};
   // MockProvider.failureReply localizes that exact shape.

@@ -39,6 +39,7 @@ export function createLocalFallbackApi(): MitraApi {
     onSessionEvent: () => () => {},
     onOverlayShown: () => () => {},
     onOverlayHidden: () => () => {},
+    toggleAvatarFullscreen: () => {},
     // No main process to log to — degrade honestly (mock-mode rule), never throw.
     reportTranscript: () => {},
     // Browser preview has no main process to copy files into userData —

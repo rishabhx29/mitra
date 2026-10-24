@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import { Lipsync } from 'wawa-lipsync';
 import type { SessionState } from '../../shared/types';
 import { VrmView } from './VrmView';
@@ -43,6 +44,8 @@ export interface AvatarProps {
   audioEl?: RefObject<HTMLAudioElement | null>;
   /** Show the embedded-license panel (default true when a model is loaded). */
   licenseVisible?: boolean;
+  /** Viewer mode: user-orbitable camera framed for a large window (default false). */
+  orbit?: boolean;
   className?: string;
   /** Notified with the extracted embedded license meta on successful load. */
   onLicense?: (info: VrmLicenseInfo | null) => void;
@@ -55,6 +58,7 @@ export function Avatar({
   amplitudeRef,
   audioEl,
   licenseVisible = true,
+  orbit = false,
   className,
   onLicense,
 }: AvatarProps) {
@@ -73,13 +77,18 @@ export function Avatar({
         // the default camera at (0,0,0) — the model's feet — unless a
         // `rotation` is passed (verified in @react-three/fiber events module:
         // "Always look at center by default ... unless cameraOptions.rotation").
-        camera={{
-          position: [0, 1.3, 1.7],
-          fov: 30,
-          rotation: [-Math.atan2(0.05, 1.7), 0, 0],
-        }}
+        camera={
+          orbit
+            ? { position: [0, 1.15, 2.8], fov: 35 }
+            : {
+                position: [0, 1.3, 1.7],
+                fov: 30,
+                rotation: [-Math.atan2(0.05, 1.7), 0, 0],
+              }
+        }
         gl={{ alpha: true, antialias: true }}
       >
+        {orbit && <OrbitControls makeDefault target={[0, 1, 0]} enablePan={false} minDistance={1.2} maxDistance={5} />}
         <ambientLight intensity={1.1} />
         <directionalLight position={[1.5, 2.5, 2]} intensity={1.4} />
         <directionalLight position={[-2, 1, 1]} intensity={0.4} />

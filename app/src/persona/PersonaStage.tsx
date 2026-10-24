@@ -40,6 +40,8 @@ export interface PersonaStageProps {
   licenseVisible?: boolean;
   /** Enable orb bloom post-processing (default true). */
   bloom?: boolean;
+  /** Avatar viewer mode: user-orbitable camera for large windows (default false). */
+  orbit?: boolean;
   className?: string;
 }
 
@@ -57,6 +59,7 @@ export function PersonaStage({
   vrmUrl = null,
   licenseVisible = true,
   bloom = true,
+  orbit = false,
   className,
 }: PersonaStageProps) {
   // Hooks run unconditionally (rules of hooks): analyse whatever source is
@@ -77,6 +80,7 @@ export function PersonaStage({
         amplitudeRef={amplitudeRef}
         audioEl={audioEl}
         licenseVisible={licenseVisible}
+        orbit={orbit}
         className={className}
       />
     );

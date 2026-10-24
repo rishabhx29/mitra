@@ -17,6 +17,7 @@ import { createTray, type TrayLike } from './tray';
 import { createMockNotion } from '../src/server/mockNotion';
 import { startBridge } from '../src/server/bridge';
 import { createOverlayController, createOverlayWindow, type OverlayWindowLike } from './windows/overlay';
+import { createAvatarFullscreenWindow } from './windows/fullscreen';
 import { createSettingsWindow, type SettingsWindowLike } from './windows/settings';
 
 const PRELOAD_PATH = join(__dirname, '../preload/index.js');
@@ -25,6 +26,7 @@ const RENDERER_FILE = join(__dirname, '../renderer/index.html');
 let overlayWindow: OverlayWindowLike | null = null;
 let settingsWindow: SettingsWindowLike | null = null;
 let tray: TrayLike | null = null;
+let fullscreenWindow: OverlayWindowLike | null = null;
 
 // ---- single instance ----
 // A second launch focuses settings instead of spawning a duplicate tray icon.
@@ -37,7 +39,7 @@ if (!gotSingleInstanceLock) {
 
 function loadRenderer(
   win: Pick<OverlayWindowLike, 'loadURL' | 'loadFile'>,
-  which: 'overlay' | 'settings',
+  which: 'overlay' | 'settings' | 'fullscreen',
 ): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
   // E2E affordance (Task F): with MITRA_E2E=1 the overlay page is loaded with
@@ -104,6 +106,7 @@ function bootstrap(): void {
     overlay,
     onSessionEvent: sendToSettings,
     userDataDir: app.getPath('userData'),
+    onToggleAvatarFullscreen: toggleAvatarFullscreen,
     onSettingsChanged: (next, previous) => {
       settings = next;
       if (next.hotkey !== previous.hotkey) {
@@ -135,6 +138,23 @@ function bootstrap(): void {
     tray = null;
   });
 
+  // ---- fullscreen avatar viewer (singleton toggle; Esc closes from the window side) ----
+  function toggleAvatarFullscreen(): void {
+    if (fullscreenWindow && !(fullscreenWindow.isDestroyed?.() ?? false)) {
+      fullscreenWindow.close();
+      fullscreenWindow = null;
+      return;
+    }
+    fullscreenWindow = createAvatarFullscreenWindow({
+      BrowserWindow,
+      preloadPath: PRELOAD_PATH,
+      loadPage: (win) => loadRenderer(win, 'fullscreen'),
+    });
+    fullscreenWindow.on('closed', () => {
+      fullscreenWindow = null;
+    });
+  }
+
   // ---- local bridge (127.0.0.1:8765): Bolna session minting + permission-gated tools ----
   // Wired by the orchestrator after Phase 1 (Task C). mockNotion persists to userData so
   // demo items survive restarts; session endpoint default lives in bridge.ts.
@@ -162,6 +182,10 @@ function bootstrap(): void {
   //   electronApp.evaluate(({ ipcMain }, ch) => { ipcMain.emit(ch); }, 'mitra:e2e-…')
   if (process.env['MITRA_E2E'] === '1') {
     ipcMain.on('mitra:e2e-toggle-overlay', () => toggleOverlay());
+    // Deterministic summon for tests: show unconditionally (a toggle hides the
+    // overlay when it is still visible — e.g. mid auto-dismiss after the
+    // inactivity timeout fired during test setup).
+    ipcMain.on('mitra:e2e-show-overlay', () => overlay.show());
     ipcMain.on('mitra:e2e-show-settings', () => showSettings());
   }
 }
