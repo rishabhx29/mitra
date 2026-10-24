@@ -219,7 +219,7 @@ export default function PersonaHarness() {
         <ControlGroup label="VRM avatar (user-supplied — none bundled)">
           <input
             type="file"
-            accept=".vrm,model/gltf-binary"
+            accept=".vrm"
             onChange={(e) => onVrmFile(e.target.files?.[0])}
             className="w-full text-[11px] text-zinc-300 file:mr-2 file:rounded file:border-0 file:bg-zinc-800 file:px-2 file:py-1 file:text-[11px] file:text-zinc-200"
           />

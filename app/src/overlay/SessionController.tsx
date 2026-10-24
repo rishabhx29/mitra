@@ -52,6 +52,9 @@ export function SessionController({ settings, devMode = false }: SessionControll
   const [state, setState] = useState<SessionState>('idle');
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [devText, setDevText] = useState('');
+  // Persisted avatar (Settings.avatarVrmPath) as a blob URL, so the summon
+  // circle shows the user's chosen persona — not just the settings preview.
+  const [vrmUrl, setVrmUrl] = useState<string | null>(null);
 
   const providerRef = useRef<VoiceProvider | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
@@ -75,6 +78,28 @@ export function SessionController({ settings, devMode = false }: SessionControll
   languageRef.current = language;
 
   const dismiss = useCallback(dismissOverlay, []);
+
+  // ---- persisted avatar: pull bytes via the idempotent IPC copy, make a blob URL ----
+  useEffect(() => {
+    if (settings.persona !== 'avatar' || !settings.avatarVrmPath || !window.mitra) return;
+    let url: string | null = null;
+    let disposed = false;
+    void window.mitra
+      .setAvatarFile({ kind: 'pick', sourcePath: settings.avatarVrmPath })
+      .then((res) => {
+        if (!disposed && res.ok) {
+          url = URL.createObjectURL(new Blob([res.bytes], { type: 'model/gltf-binary' }));
+          setVrmUrl(url);
+        }
+      })
+      .catch(() => {
+        /* avatar stays null -> PersonaStage shows its empty state */
+      });
+    return () => {
+      disposed = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [settings.persona, settings.avatarVrmPath]);
 
   // ---- provider lifecycle (mount → start; language change → fresh provider) ----
   useEffect(() => {
@@ -286,6 +311,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
             state={state}
             colors={settings.orbColors}
             amplitudeRef={driveRef}
+            vrmUrl={vrmUrl}
           />
         </div>
 
