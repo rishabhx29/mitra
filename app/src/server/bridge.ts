@@ -19,7 +19,7 @@ export const DEFAULT_BRIDGE_PORT = 8765;
  * @bolna/web-call SDK's d.ts mentions "/web-call/freeswitch-session" — the URL is
  * injectable so a one-line change at the wiring site fixes it if Bolna renames it.
  */
-export const DEFAULT_BOLNA_SESSION_URL = 'https://api.bolna.ai/web-call/session';
+export const DEFAULT_BOLNA_SESSION_URL = 'https://api.bolna.ai/web-call/freeswitch-session';
 
 export interface BridgeDeps {
   /** Current settings; re-read per request so Settings-UI changes apply live. */

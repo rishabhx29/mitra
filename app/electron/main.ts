@@ -13,6 +13,8 @@ import { registerIpcHandlers } from './ipc';
 import { createHotkeyManager } from './hotkey';
 import { createSettingsStore } from './store';
 import { createTray, type TrayLike } from './tray';
+import { createMockNotion } from '../src/server/mockNotion';
+import { startBridge } from '../src/server/bridge';
 import { createOverlayController, createOverlayWindow, type OverlayWindowLike } from './windows/overlay';
 import { createSettingsWindow, type SettingsWindowLike } from './windows/settings';
 
@@ -115,9 +117,18 @@ function bootstrap(): void {
     tray = null;
   });
 
-  // TODO(bridge-integration): start the local bridge here once Task C lands, e.g.
-  //   void startBridge(store)  // 127.0.0.1:8765 — wired by the orchestrator (Phase 2).
-  // Session events from the bridge reach the overlay via overlay.sendSessionEvent(...).
+  // ---- local bridge (127.0.0.1:8765): Bolna session minting + permission-gated tools ----
+  // Wired by the orchestrator after Phase 1 (Task C). mockNotion persists to userData so
+  // demo items survive restarts; session endpoint default lives in bridge.ts.
+  void startBridge({
+    settings: () => settings,
+    mockNotion: createMockNotion({ filePath: join(app.getPath('userData'), 'mock-notion.json') }),
+    log: (message) => console.log(`[mitra:bridge] ${message}`),
+    onProgress: (tool, message) => overlay.sendSessionEvent({ kind: 'tool-result', result: { ok: true, summary: `${tool}: ${message}` } }),
+  }).catch((err: unknown) => {
+    // Mock-mode-first: the app stays fully usable without the bridge.
+    console.warn('[mitra:bridge] failed to start:', err);
+  });
 }
 
 function showSettings(): void {

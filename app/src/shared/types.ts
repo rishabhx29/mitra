@@ -63,7 +63,7 @@ export interface VoiceProvider {
 export const DEFAULT_SETTINGS: Settings = {
   persona: 'orb',
   orbColors: { a: '#4f8cff', b: '#b26bff' },
-  hotkey: 'Alt+Space',
+  hotkey: 'Ctrl+Shift+Space',
   language: 'en',
   permissions: { notion: true, launcher: true, terminal: false, browser: true },
   apps: [

@@ -95,7 +95,7 @@ describe('POST /api/session', () => {
     expect(await res.json()).toEqual(session);
     expect(calls).toHaveLength(1);
     const call = calls[0]!;
-    expect(call.url).toBe('https://api.bolna.ai/web-call/session');
+    expect(call.url).toBe('https://api.bolna.ai/web-call/freeswitch-session');
     expect(call.init?.method).toBe('POST');
     expect(call.init?.headers?.['Authorization']).toBe('Bearer bn-key');
     const body = JSON.parse(call.init?.body ?? '{}') as {
