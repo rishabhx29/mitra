@@ -1,0 +1,48 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: "persona: orb · state: thinking · mock amplitude"
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "Persona dev harness" [level=1] [ref=e11]
+      - paragraph [ref=e12]:
+        - text: "Route:"
+        - code [ref=e13]: "?window=settings#/dev/persona"
+        - text: (needs an App.tsx route — see PersonaHarness.tsx header).
+    - generic [ref=e14]:
+      - generic [ref=e15]: Session state
+      - generic [ref=e16]:
+        - button "idle" [ref=e17]
+        - button "listening" [ref=e18]
+        - button "thinking" [active] [ref=e19]
+        - button "speaking" [ref=e20]
+        - button "error" [ref=e21]
+    - generic [ref=e22]:
+      - generic [ref=e23]: Persona
+      - generic [ref=e24]:
+        - button "orb" [ref=e25]
+        - button "avatar" [ref=e26]
+    - generic [ref=e27]:
+      - generic [ref=e28]: Orb colors (Settings.orbColors)
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - text: a
+          - textbox "a" [ref=e31] [cursor=pointer]: "#4f8cff"
+        - generic [ref=e32]:
+          - text: b
+          - textbox "b" [ref=e33] [cursor=pointer]: "#b26bff"
+        - generic [ref=e34]:
+          - checkbox "bloom" [checked] [ref=e35]
+          - text: bloom
+    - generic [ref=e36]:
+      - generic [ref=e37]: VRM avatar (user-supplied — none bundled)
+      - button "Choose File" [ref=e38]
+    - generic [ref=e39]:
+      - generic [ref=e40]: Audio drive
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - checkbox "fake speech (generated WAV tone → real analyser path)" [ref=e43]
+          - text: fake speech (generated WAV tone → real analyser path)
+        - generic [ref=e44]:
+          - checkbox "mock amplitude (zero audio — mock mode)" [checked] [ref=e45]
+          - text: mock amplitude (zero audio — mock mode)
+        - paragraph [ref=e46]: "Orb mode: analyser drives amplitude. Avatar without audio: amplitude fallback (aa)."
+    - generic [ref=e47]: "Adapted with attribution: samantha-ui (MIT) shaders + SmoothedValue + state configs; my-jarvis (MIT) state colors; amica (MIT) expression wiring; wawa-lipsync (MIT) visemes."

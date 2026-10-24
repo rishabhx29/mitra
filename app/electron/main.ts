@@ -1,29 +1,138 @@
-// Minimal Phase-0 stub. Task B (SHELL) replaces this with the full window/hotkey/tray/bridge setup.
-import { app, BrowserWindow } from 'electron';
+// Mitra main process: single-instance lock, boots hidden to tray, overlay + hotkey +
+// IPC + settings persistence. Phase-0 stub replaced by Task B (SHELL).
+//
+// Window/toggle patterns adapted from ueli (MIT):
+//   - hotkey re-register on setting change: _reference/ueli/src/main/Core/GlobalShortcut/GlobalShortcutModule.ts
+//   - toggle + hide: _reference/ueli/src/main/Core/SearchWindow/BrowserWindowToggler/BrowserWindowToggler.ts
+// (see windows/overlay.ts for the deliberate deviations: showInactive instead of
+// show+focus, no minimize-before-hide).
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, Tray } from 'electron';
 import { join } from 'node:path';
+import type { Settings } from '../src/shared/types';
+import { registerIpcHandlers } from './ipc';
+import { createHotkeyManager } from './hotkey';
+import { createSettingsStore } from './store';
+import { createTray, type TrayLike } from './tray';
+import { createOverlayController, createOverlayWindow, type OverlayWindowLike } from './windows/overlay';
+import { createSettingsWindow, type SettingsWindowLike } from './windows/settings';
 
-function createSettingsWindow(): void {
-  const win = new BrowserWindow({
-    width: 1100,
-    height: 760,
-    show: false,
-    backgroundColor: '#09090b',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  win.on('ready-to-show', () => win.show());
-  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}?window=settings`);
+const PRELOAD_PATH = join(__dirname, '../preload/index.js');
+const RENDERER_FILE = join(__dirname, '../renderer/index.html');
+
+let overlayWindow: OverlayWindowLike | null = null;
+let settingsWindow: SettingsWindowLike | null = null;
+let tray: TrayLike | null = null;
+
+// ---- single instance ----
+// A second launch focuses settings instead of spawning a duplicate tray icon.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  void app.whenReady().then(() => bootstrap());
+}
+
+function loadRenderer(
+  win: Pick<OverlayWindowLike, 'loadURL' | 'loadFile'>,
+  which: 'overlay' | 'settings',
+): void {
+  const devUrl = process.env['ELECTRON_RENDERER_URL'];
+  if (!app.isPackaged && devUrl) {
+    void win.loadURL(`${devUrl}?window=${which}`);
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { query: { window: 'settings' } });
+    void win.loadFile(RENDERER_FILE, { query: { window: which } });
   }
 }
 
-app.whenReady().then(createSettingsWindow);
+function bootstrap(): void {
+  // Menu-bar-only app on macOS (no dock icon; tray + hotkey are the entry points).
+  if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  const store = createSettingsStore({ app });
+  let settings: Settings = store.load();
+
+  // ---- overlay (created hidden; summoned by hotkey / tray) ----
+  overlayWindow = createOverlayWindow({
+    BrowserWindow,
+    screen,
+    preloadPath: PRELOAD_PATH,
+    loadPage: (win) => loadRenderer(win, 'overlay'),
+  });
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+
+  const overlay = createOverlayController({ getWindow: () => overlayWindow });
+  const toggleOverlay = (): void => overlay.toggle();
+
+  // Escape dismisses the overlay even before the renderer wires mitra:hide-overlay
+  // (main-process safety net; the IPC path in ipc.ts remains the contract).
+  overlayWindow.webContents.on('before-input-event', (_event: unknown, input: unknown) => {
+    const key = input as { type?: string; key?: string };
+    if (key.type === 'keyDown' && key.key === 'Escape') overlay.hide();
+  });
+
+  // ---- global hotkey (default from settings; re-registers when settings change) ----
+  const hotkeyManager = createHotkeyManager({
+    shortcut: globalShortcut,
+    onError: (message) => console.warn(`[mitra] ${message}`),
+  });
+  hotkeyManager.register(settings.hotkey, toggleOverlay);
+
+  // ---- IPC (settings get/set validated + persisted; hide/toggle overlay) ----
+  registerIpcHandlers({
+    ipcMain,
+    store,
+    overlay,
+    onSettingsChanged: (next, previous) => {
+      settings = next;
+      if (next.hotkey !== previous.hotkey) {
+        hotkeyManager.register(next.hotkey, toggleOverlay);
+      }
+    },
+  });
+
+  // ---- tray ----
+  tray = createTray({
+    Tray,
+    Menu,
+    onShowSettings: showSettings,
+    onToggleOverlay: toggleOverlay,
+    onQuit: () => app.quit(),
+  });
+
+  // ---- app lifecycle ----
+  app.on('second-instance', () => showSettings());
+
+  // Tray app: closing all windows keeps Mitra alive; quitting happens via the tray menu.
+  app.on('window-all-closed', () => {
+    /* stay resident in tray */
+  });
+
+  app.on('before-quit', () => {
+    globalShortcut.unregisterAll();
+    tray?.destroy();
+    tray = null;
+  });
+
+  // TODO(bridge-integration): start the local bridge here once Task C lands, e.g.
+  //   void startBridge(store)  // 127.0.0.1:8765 — wired by the orchestrator (Phase 2).
+  // Session events from the bridge reach the overlay via overlay.sendSessionEvent(...).
+}
+
+function showSettings(): void {
+  if (settingsWindow && !(settingsWindow.isDestroyed?.() ?? false)) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore();
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  settingsWindow = createSettingsWindow({
+    BrowserWindow,
+    preloadPath: PRELOAD_PATH,
+    loadPage: (win) => loadRenderer(win, 'settings'),
+  });
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+}

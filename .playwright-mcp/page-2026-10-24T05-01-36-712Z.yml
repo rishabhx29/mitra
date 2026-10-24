@@ -1,0 +1,56 @@
+- generic [ref=f3e3]:
+  - generic [ref=f3e4]:
+    - generic [ref=f3e48]:
+      - generic [ref=f3e49]: Amica_1 · v1.1
+      - generic [ref=f3e50]: By Sara
+      - generic [ref=f3e51]: "License: Custom license — redistribution prohibited"
+      - generic [ref=f3e52]: "Avatar permission: ExplicitlyLicensedPerson · Commercial use: Disallow · Violent content: Disallow · Sexual content: Disallow"
+    - generic: "persona: avatar · state: idle · mock amplitude"
+  - generic [ref=f3e9]:
+    - generic [ref=f3e10]:
+      - heading "Persona dev harness" [level=1] [ref=f3e11]
+      - paragraph [ref=f3e12]:
+        - text: "Route:"
+        - code [ref=f3e13]: "?window=settings#/dev/persona"
+        - text: (needs an App.tsx route — see PersonaHarness.tsx header).
+    - generic [ref=f3e14]:
+      - generic [ref=f3e15]: Session state
+      - generic [ref=f3e16]:
+        - button "idle" [ref=f3e17]
+        - button "listening" [ref=f3e18]
+        - button "thinking" [ref=f3e19]
+        - button "speaking" [ref=f3e20]
+        - button "error" [ref=f3e21]
+    - generic [ref=f3e22]:
+      - generic [ref=f3e23]: Persona
+      - generic [ref=f3e24]:
+        - button "orb" [ref=f3e25]
+        - button "avatar" [ref=f3e26]
+    - generic [ref=f3e27]:
+      - generic [ref=f3e28]: Orb colors (Settings.orbColors)
+      - generic [ref=f3e29]:
+        - generic [ref=f3e30]:
+          - text: a
+          - textbox "a" [ref=f3e31] [cursor=pointer]: "#4f8cff"
+        - generic [ref=f3e32]:
+          - text: b
+          - textbox "b" [ref=f3e33] [cursor=pointer]: "#b26bff"
+        - generic [ref=f3e34]:
+          - checkbox "bloom" [checked] [ref=f3e35]
+          - text: bloom
+    - generic [ref=f3e36]:
+      - generic [ref=f3e37]: VRM avatar (user-supplied — none bundled)
+      - button "Choose File" [active] [ref=f3e38]
+      - paragraph [ref=f3e53]: "loaded: AvatarSample_A.vrm"
+      - button "unload model" [ref=f3e54]
+    - generic [ref=f3e39]:
+      - generic [ref=f3e40]: Audio drive
+      - generic [ref=f3e41]:
+        - generic [ref=f3e42]:
+          - checkbox "fake speech (generated WAV tone → real analyser path)" [ref=f3e43]
+          - text: fake speech (generated WAV tone → real analyser path)
+        - generic [ref=f3e44]:
+          - checkbox "mock amplitude (zero audio — mock mode)" [checked] [ref=f3e45]
+          - text: mock amplitude (zero audio — mock mode)
+        - paragraph [ref=f3e46]: "Orb mode: analyser drives amplitude. Avatar without audio: amplitude fallback (aa)."
+    - generic [ref=f3e47]: "Adapted with attribution: samantha-ui (MIT) shaders + SmoothedValue + state configs; my-jarvis (MIT) state colors; amica (MIT) expression wiring; wawa-lipsync (MIT) visemes."

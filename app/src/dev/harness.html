@@ -1,0 +1,16 @@
+<!-- Dev-only entry for the persona harness. electron-vite's renderer dev
+     server (electron-vite dev → http://localhost:5173) serves any html in
+     src/, so this page is reachable at /dev/harness.html without touching
+     App.tsx (orchestrator-owned) or electron.vite.config.ts.
+     The production route is ?window=settings#/dev/persona → PersonaHarness. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mitra — Persona Harness (dev)</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/dev/harnessEntry.tsx"></script>
+  </body>
+</html>

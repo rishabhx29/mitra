@@ -1,0 +1,48 @@
+- generic [ref=f5e3]:
+  - generic [ref=f5e4]: "persona: orb · state: idle · mock amplitude"
+  - generic [ref=f5e9]:
+    - generic [ref=f5e10]:
+      - heading "Persona dev harness" [level=1] [ref=f5e11]
+      - paragraph [ref=f5e12]:
+        - text: "Route:"
+        - code [ref=f5e13]: "?window=settings#/dev/persona"
+        - text: (needs an App.tsx route — see PersonaHarness.tsx header).
+    - generic [ref=f5e14]:
+      - generic [ref=f5e15]: Session state
+      - generic [ref=f5e16]:
+        - button "idle" [ref=f5e17]
+        - button "listening" [ref=f5e18]
+        - button "thinking" [ref=f5e19]
+        - button "speaking" [ref=f5e20]
+        - button "error" [ref=f5e21]
+    - generic [ref=f5e22]:
+      - generic [ref=f5e23]: Persona
+      - generic [ref=f5e24]:
+        - button "orb" [ref=f5e25]
+        - button "avatar" [ref=f5e26]
+    - generic [ref=f5e27]:
+      - generic [ref=f5e28]: Orb colors (Settings.orbColors)
+      - generic [ref=f5e29]:
+        - generic [ref=f5e30]:
+          - text: a
+          - textbox "a" [ref=f5e31] [cursor=pointer]: "#4f8cff"
+        - generic [ref=f5e32]:
+          - text: b
+          - textbox "b" [ref=f5e33] [cursor=pointer]: "#b26bff"
+        - generic [ref=f5e34]:
+          - checkbox "bloom" [checked] [ref=f5e35]
+          - text: bloom
+    - generic [ref=f5e36]:
+      - generic [ref=f5e37]: VRM avatar (user-supplied — none bundled)
+      - button "Choose File" [ref=f5e38]
+    - generic [ref=f5e39]:
+      - generic [ref=f5e40]: Audio drive
+      - generic [ref=f5e41]:
+        - generic [ref=f5e42]:
+          - checkbox "fake speech (generated WAV tone → real analyser path)" [ref=f5e43]
+          - text: fake speech (generated WAV tone → real analyser path)
+        - generic [ref=f5e44]:
+          - checkbox "mock amplitude (zero audio — mock mode)" [checked] [ref=f5e45]
+          - text: mock amplitude (zero audio — mock mode)
+        - paragraph [ref=f5e46]: "Orb mode: analyser drives amplitude. Avatar without audio: amplitude fallback (aa)."
+    - generic [ref=f5e47]: "Adapted with attribution: samantha-ui (MIT) shaders + SmoothedValue + state configs; my-jarvis (MIT) state colors; amica (MIT) expression wiring; wawa-lipsync (MIT) visemes."
