@@ -21,6 +21,8 @@ export interface SettingsWindowLike {
   once(event: string, listener: () => void): unknown;
   loadURL(url: string): unknown;
   loadFile(path: string, options?: { query?: Record<string, string> }): unknown;
+  /** Session-event sink for the Conversation log (main → settings renderer IPC). */
+  webContents: { send(channel: string, ...args: unknown[]): void };
 }
 
 export type SettingsWindowConstructor = new (

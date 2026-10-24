@@ -33,6 +33,9 @@ export const SettingsSchema: z.ZodType<Settings> = z.object({
   permissions: PermissionsSchema,
   apps: z.array(AppAliasSchema),
   notion: NotionConfigSchema,
+  // Optional (pre-approved contract change): absent / '' both degrade to undefined,
+  // so a renderer can clear the persisted avatar by patching it to ''.
+  avatarVrmPath: z.string().min(1).optional(),
 });
 
 /**
@@ -55,6 +58,7 @@ export function sanitizeSettings(input: unknown): Settings {
     permissions: pick(PermissionsSchema, raw['permissions'], DEFAULT_SETTINGS.permissions),
     apps: pick(z.array(AppAliasSchema), raw['apps'], DEFAULT_SETTINGS.apps),
     notion: pick(NotionConfigSchema, raw['notion'], DEFAULT_SETTINGS.notion),
+    avatarVrmPath: pick(z.string().min(1).optional(), raw['avatarVrmPath'], DEFAULT_SETTINGS.avatarVrmPath),
   };
 }
 

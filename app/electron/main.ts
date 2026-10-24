@@ -8,6 +8,7 @@
 // show+focus, no minimize-before-hide).
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, Tray } from 'electron';
 import { join } from 'node:path';
+import { IPC, type SessionEvent } from '../src/shared/ipc';
 import type { Settings } from '../src/shared/types';
 import { registerIpcHandlers } from './ipc';
 import { createHotkeyManager } from './hotkey';
@@ -88,11 +89,21 @@ function bootstrap(): void {
   });
   hotkeyManager.register(settings.hotkey, toggleOverlay);
 
-  // ---- IPC (settings get/set validated + persisted; hide/toggle overlay) ----
+  // ---- IPC (settings get/set validated + persisted; hide/toggle overlay; avatar copy) ----
+  // Settings-window session sink: Conversation log (TranscriptLog) lives in the
+  // settings renderer, which never talks to the bridge itself — events reach it
+  // over mitra:session-event (renderer-reported transcripts + bridge tool progress).
+  const sendToSettings = (event: SessionEvent): void => {
+    if (settingsWindow && !(settingsWindow.isDestroyed?.() ?? false)) {
+      settingsWindow.webContents.send(IPC.sessionEvent, event);
+    }
+  };
   registerIpcHandlers({
     ipcMain,
     store,
     overlay,
+    onSessionEvent: sendToSettings,
+    userDataDir: app.getPath('userData'),
     onSettingsChanged: (next, previous) => {
       settings = next;
       if (next.hotkey !== previous.hotkey) {
@@ -131,7 +142,14 @@ function bootstrap(): void {
     settings: () => settings,
     mockNotion: createMockNotion({ filePath: join(app.getPath('userData'), 'mock-notion.json') }),
     log: (message) => console.log(`[mitra:bridge] ${message}`),
-    onProgress: (tool, message) => overlay.sendSessionEvent({ kind: 'tool-result', result: { ok: true, summary: `${tool}: ${message}` } }),
+    onProgress: (tool, message) => {
+      const event: SessionEvent = {
+        kind: 'tool-result',
+        result: { ok: true, summary: `${tool}: ${message}` },
+      };
+      overlay.sendSessionEvent(event); // overlay circle system note
+      sendToSettings(event); // settings Conversation log tool row
+    },
   }).catch((err: unknown) => {
     // Mock-mode-first: the app stays fully usable without the bridge.
     console.warn('[mitra:bridge] failed to start:', err);
