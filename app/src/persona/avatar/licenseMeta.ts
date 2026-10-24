@@ -60,10 +60,28 @@ export function extractLicenseMeta(meta: unknown): VrmLicenseInfo | null {
   if (!meta || typeof meta !== 'object') return null;
   const m = meta as Record<string, unknown>;
 
-  if (m.metaVersion === '1') {
+  if (isVrm1Meta(m)) {
     return extractVrm1(m);
   }
   return extractVrm0(m);
+}
+
+/**
+ * VRM1 detection beyond `metaVersion === '1'`: a RAW glTF `extensions.VRMC_vrm.meta`
+ * object (as parsed by settings/vrmMeta.ts, before three-vrm injects `metaVersion`)
+ * carries none — verified against the bundled Seed-san sample — but it does carry
+ * VRM1-only field names (VRM0 uses `author`/`allowedUserName`/`commercialUssageName`
+ * etc., which never collide with these).
+ */
+function isVrm1Meta(m: Record<string, unknown>): boolean {
+  return (
+    m.metaVersion === '1' ||
+    Array.isArray(m.authors) ||
+    m['avatarPermission'] !== undefined ||
+    m['commercialUsage'] !== undefined ||
+    m['copyrightInformation'] !== undefined ||
+    m['creditNotation'] !== undefined
+  );
 }
 
 function extractVrm1(m: Record<string, unknown>): VrmLicenseInfo | null {

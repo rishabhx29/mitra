@@ -15,6 +15,7 @@ directories:
 
 files:
   - out/** # built main + preload + renderer (electron-vite output)
+  - assets/** # bundled sample VRM (assets/avatars/Seed-san.vrm) — read from inside the asar by mitra:set-avatar-file
   - package.json
   - '!**/*.map'
 

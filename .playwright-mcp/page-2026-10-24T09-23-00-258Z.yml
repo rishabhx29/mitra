@@ -1,0 +1,4 @@
+- generic [ref=f1e4]:
+  - generic: Press the hotkey to talk
+  - generic: No speech detected
+  - textbox "Type a command…" [ref=f1e11]: add milk to my todo list

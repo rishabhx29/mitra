@@ -1,12 +1,15 @@
-// Settings window shell (Task E): loads settings over the mitra IPC bridge,
-// hosts the seven panels, and shows a status.saved toast after each successful
-// save. Outside Electron (plain-browser dev) it degrades to an in-memory
-// fallback so the UI still works — flagged with a local-only hint.
+// Settings window shell (Task E; UI-polish wave: glass/depth shell per
+// docs/DESIGN_BRIEF.md — orb-color CSS vars drive the radial shell background,
+// the sidebar indicator and every accent). Loads settings over the mitra IPC
+// bridge, hosts the panels, and shows a status.saved toast after each
+// successful save. Outside Electron (plain-browser dev) it degrades to an
+// in-memory fallback so the UI still works — flagged with a local-only hint.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { t } from '../i18n';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/types';
 import { resolveMitraApi } from './mitraClient';
+import HomePanel from './HomePanel';
 import PersonaPicker from './PersonaPicker';
 import PermissionsPanel from './PermissionsPanel';
 import AppsPanel from './AppsPanel';
@@ -18,6 +21,7 @@ import { Icon } from './ui';
 import type { SectionId, SaveFn } from './types';
 
 const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }> = [
+  { id: 'home', labelKey: 'settings.home', icon: 'home' },
   { id: 'persona', labelKey: 'settings.persona', icon: 'persona' },
   { id: 'permissions', labelKey: 'settings.permissions', icon: 'permissions' },
   { id: 'apps', labelKey: 'settings.apps', icon: 'apps' },
@@ -32,7 +36,7 @@ const TOAST_MS = 1800;
 export default function SettingsApp() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [persisted, setPersisted] = useState(true);
-  const [section, setSection] = useState<SectionId>('persona');
+  const [section, setSection] = useState<SectionId>('home');
   const [toast, setToast] = useState<{ tone: 'ok' | 'err'; key: string } | null>(null);
   const apiRef = useRef<{ api: ReturnType<typeof resolveMitraApi>['api'] } | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -82,9 +86,19 @@ export default function SettingsApp() {
     [showToast],
   );
 
+  // Orb accent vars (brief §"Base"): the whole shell — background tint,
+  // gradients, glows — re-tints live when the user changes their orb colors.
+  const orbVars =
+    settings === null
+      ? undefined
+      : ({
+          '--orb-a': settings.orbColors.a,
+          '--orb-b': settings.orbColors.b,
+        } as CSSProperties);
+
   if (settings === null) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+      <div className="mitra-shell flex h-full w-full items-center justify-center text-sm text-zinc-500">
         …
       </div>
     );
@@ -93,9 +107,9 @@ export default function SettingsApp() {
   const panelProps = { settings, tt, save };
 
   return (
-    <div className="flex h-full w-full bg-zinc-950 text-zinc-100">
+    <div className="mitra-shell flex h-full w-full text-zinc-100" style={orbVars}>
       {/* Sidebar */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-800/80 bg-zinc-900/30">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-white/[0.06] bg-white/[0.02] backdrop-blur-xl">
         <div className="flex items-center gap-3 px-5 py-5">
           <span
             className="h-7 w-7 rounded-full"
@@ -105,11 +119,11 @@ export default function SettingsApp() {
             }}
           />
           <div>
-            <div className="text-sm font-semibold">{tt('app.title')}</div>
+            <div className="text-sm font-semibold text-zinc-50">{tt('app.title')}</div>
             <div className="text-[11px] text-zinc-500">{tt('settings.title')}</div>
           </div>
         </div>
-        <nav className="flex-1 space-y-1 px-3" aria-label={tt('settings.title')}>
+        <nav className="stagger flex-1 space-y-1 px-3" aria-label={tt('settings.title')}>
           {SECTIONS.map(({ id, labelKey, icon }) => {
             const active = section === id;
             return (
@@ -117,15 +131,21 @@ export default function SettingsApp() {
                 key={id}
                 onClick={() => setSection(id)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
-                  active ? 'bg-white/5 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'
+                className={`focus-orb relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                  active ? 'bg-white/[0.06] text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'
                 }`}
               >
-                <span className={active ? 'text-sky-400' : 'text-zinc-500'}>
+                {/* Orb-gradient indicator on the active item (brief §"Accent system"). */}
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="orb-gradient absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
+                  />
+                )}
+                <span style={active ? { color: 'var(--orb-a)' } : undefined}>
                   <Icon name={icon} />
                 </span>
                 {tt(labelKey)}
-                {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sky-400" />}
               </button>
             );
           })}
@@ -139,9 +159,18 @@ export default function SettingsApp() {
 
       {/* Content */}
       <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-8 py-8">
-          <h2 className="mb-6 text-lg font-semibold">{tt(SECTIONS.find((s) => s.id === section)?.labelKey ?? 'settings.title')}</h2>
+        <div className={`mx-auto px-8 py-8 ${section === 'home' ? 'max-w-3xl' : 'max-w-2xl'}`}>
+          {section !== 'home' && (
+            <h2 className="mb-6 text-lg font-semibold text-zinc-50">
+              {tt(SECTIONS.find((s) => s.id === section)?.labelKey ?? 'settings.title')}
+            </h2>
+          )}
 
+          <div className={section === 'home' ? '' : 'hidden'}>
+            {section === 'home' && (
+              <HomePanel settings={settings} tt={tt} onNavigate={setSection} />
+            )}
+          </div>
           <div className={section === 'persona' ? '' : 'hidden'}>
             {section === 'persona' && <PersonaPicker {...panelProps} />}
           </div>
@@ -171,7 +200,7 @@ export default function SettingsApp() {
       {toast && (
         <div
           role="status"
-          className={`fixed bottom-6 right-6 flex items-center gap-2 rounded-lg border px-4 py-2 text-sm shadow-lg backdrop-blur ${
+          className={`fixed bottom-6 right-6 flex items-center gap-2 rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur ${
             toast.tone === 'ok'
               ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
               : 'border-red-500/40 bg-red-500/15 text-red-200'

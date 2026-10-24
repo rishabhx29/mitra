@@ -6,7 +6,8 @@
 //   3. the overlay summons and Escape dismisses (asserted via the Page Visibility
 //      API — Playwright cannot press real OS-level global hotkeys)
 //   4. the ?dev=1 text input drives the MockProvider's exact speech path:
-//      "add milk to my todo list" → notion_add_todo → result caption
+//      "add milk to my todo list" → notion_add_todo → result caption, with the
+//      user utterance landing in the settings window's Conversation log
 //   5. the mock board carries the item (GET /api/notion/items — Task E's route)
 //   6. terminal permission off → "open opencode …" intent → permission-denied reply
 //   7. "stop" ends the session cleanly and the overlay auto-dismisses
@@ -232,7 +233,14 @@ test('"add milk to my todo list" runs notion_add_todo and shows the result', asy
   await expect(overlayPage.getByTestId('mitra-caption')).toContainText(
     'Added to Notion (mock board): "milk"',
   );
-  await expect(overlayPage.getByTestId('mitra-caption-prev')).toContainText(
+  // UI polish (docs/DESIGN_BRIEF.md): the 220×220 circle now shows ONE status pill
+  // plus the newest agent/system reply line — user utterances are intentionally not
+  // rendered there anymore (src/overlay/Captions.tsx replaced the captions list, so
+  // mitra-caption-prev is gone). The full transcript must still exist: the overlay
+  // reports every provider entry to main (mitra:report-transcript), which streams it
+  // to the settings window's Conversation log. Pin the user's words there instead.
+  await settingsPage!.getByRole('button', { name: 'Conversation log' }).click();
+  await expect(settingsPage!.getByTestId('mitra-transcript-log')).toContainText(
     'add milk to my todo list',
   );
 });
@@ -255,6 +263,9 @@ test('terminal permission off → opencode intent gets the permission-denied rep
     });
   });
   expect(next.permissions.terminal).toBe(false);
+  // Re-open the permissions panel first — test 4 left the settings window on the
+  // Conversation log section, and role queries skip display:none subtrees.
+  await settingsPage!.getByRole('button', { name: 'App permissions' }).click();
   await expect(
     settingsPage!.getByRole('switch', { name: 'Terminal & opencode' }),
   ).toHaveAttribute('aria-checked', 'false');

@@ -15,6 +15,21 @@ const GLB_JSON_CHUNK = 0x4e4f534a; // 'JSON'
 const HEADER_SIZE = 12;
 const CHUNK_HEADER_SIZE = 8;
 
+/**
+ * Client-side upload gate for the persona picker: only files ending in .vrm are
+ * accepted (case-insensitive). Extension-only on purpose — accept=".vrm" (no
+ * MIME) is what keeps Windows file dialogs from graying models out, so the
+ * check must match what the dialog lets through.
+ */
+export function isValidVrmFileName(name: string): boolean {
+  return /^[^\\/]+\.vrm$/i.test(name);
+}
+
+/** Last path segment of an absolute Windows/POSIX path ('C:\\a\\b.vrm' → 'b.vrm'). */
+export function baseName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? '';
+}
+
 /** Parse the JSON chunk out of a GLB container. Returns null on any malformed input. */
 export function parseGlbJson(buffer: ArrayBuffer): unknown | null {
   try {

@@ -1,9 +1,222 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Mitra design tokens — docs/DESIGN_BRIEF.md §"Design tokens".
+   Shared by the settings window AND the overlay (both load this file), so:
+   - html/body/#root background stays transparent (the overlay is a floating
+     circle over the desktop; the settings shell paints its own .mitra-shell).
+   - the orb accent vars default to DEFAULT_SETTINGS.orbColors and are
+     overridden per-frame by settings/App.tsx from settings.orbColors.
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* Session-state colors (same vocabulary the overlay ring uses). */
+  --color-state-listening: #38bdf8;
+  --color-state-thinking: #fbbf24;
+  --color-state-speaking: #a78bfa;
+  --color-state-error: #f87171;
+}
+
+:root {
+  --orb-a: #4f8cff;
+  --orb-b: #b26bff;
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
   background: transparent;
+}
+
+/* Settings shell: near-black base with a faint radial tint driven by the
+   user's orb colors (brief §"Base"). Applied on the settings root div only. */
+.mitra-shell {
+  background:
+    radial-gradient(
+      1100px 700px at 88% -12%,
+      color-mix(in oklab, var(--orb-b) 16%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      900px 650px at -8% 108%,
+      color-mix(in oklab, var(--orb-a) 13%, transparent),
+      transparent 58%
+    ),
+    #0a0a0f;
+}
+
+/* ---- Glass surfaces (brief §"Surfaces") ---------------------------------- */
+
+/* Card: white/[0.04] + backdrop-blur-xl + border white/[0.08] + top
+   inner-highlight, rounded-2xl, hover lift + border-glow to 25% orb-a. */
+.glass-card {
+  border-radius: 1rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.04);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transition: border-color 180ms ease-out;
+}
+.glass-card:hover {
+  border-color: color-mix(in oklab, var(--orb-a) 25%, transparent);
+}
+
+/* Row: quieter surface for list items — no lift, color-only hover. */
+.glass-row {
+  border-radius: 0.625rem;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(255 255 255 / 0.03);
+  transition: border-color 150ms ease-out, background-color 150ms ease-out;
+}
+.glass-row:hover {
+  border-color: rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.055);
+}
+
+/* ---- Orb accent system (brief §"Accent system") -------------------------- */
+
+.orb-gradient {
+  background: linear-gradient(135deg, var(--orb-a), var(--orb-b));
+}
+
+/* Gradient headline text. */
+.orb-text {
+  background: linear-gradient(135deg, var(--orb-a), var(--orb-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Primary button: orb gradient + glow on hover. */
+.btn-orb {
+  background: linear-gradient(135deg, var(--orb-a), var(--orb-b));
+  color: #ffffff;
+  transition: filter 160ms ease-out, box-shadow 160ms ease-out;
+}
+.btn-orb:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 0 18px color-mix(in oklab, var(--orb-b) 40%, transparent);
+}
+.btn-orb:disabled {
+  background: rgb(255 255 255 / 0.06);
+  color: #71717a;
+}
+
+/* Accent badge tinted with orb-a. */
+.badge-orb {
+  border-color: color-mix(in oklab, var(--orb-a) 45%, transparent);
+  background: color-mix(in oklab, var(--orb-a) 12%, transparent);
+  color: color-mix(in oklab, var(--orb-a) 75%, white);
+}
+
+/* Icon tile for feature cards. */
+.icon-tile {
+  border-radius: 0.625rem;
+  border: 1px solid color-mix(in oklab, var(--orb-a) 30%, transparent);
+  background: color-mix(in oklab, var(--orb-a) 12%, transparent);
+  color: color-mix(in oklab, var(--orb-a) 70%, white);
+}
+
+/* Small suggestion/hotkey chip with an orb hover. */
+.chip {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  transition: border-color 150ms ease-out, color 150ms ease-out;
+}
+.chip:hover {
+  border-color: color-mix(in oklab, var(--orb-a) 45%, transparent);
+  color: color-mix(in oklab, var(--orb-a) 70%, white);
+}
+
+/* Focus ring aligned with the accent system. */
+.focus-orb:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--orb-a) 70%, transparent);
+}
+
+/* Text input: glass surface, orb focus border. */
+.input-glass {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.04);
+  transition: border-color 150ms ease-out, background-color 150ms ease-out;
+}
+.input-glass:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--orb-a) 60%, transparent);
+  background: rgb(255 255 255 / 0.06);
+}
+
+/* ---- Motion (brief §"Motion": 150–250ms ease-out, stagger ≤60ms/item,
+        honor prefers-reduced-motion — every animation/transform lives inside
+        the no-preference block, so "reduce" degrades to static states) ----- */
+
+@keyframes mitra-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mitra-orb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glass-card {
+    transition: transform 180ms ease-out, border-color 180ms ease-out,
+      box-shadow 180ms ease-out;
+  }
+  .glass-card:hover {
+    transform: translateY(-1px);
+  }
+
+  /* Entrance stagger: add .stagger to a container; direct children rise in,
+     ≤60ms apart (covers the 8-item sidebar and the 6-card feature grid). */
+  .stagger > * {
+    animation: mitra-rise-in 400ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+  .stagger > *:nth-child(7) { animation-delay: 360ms; }
+  .stagger > *:nth-child(8) { animation-delay: 420ms; }
+  .stagger > *:nth-child(9) { animation-delay: 480ms; }
+  .stagger > *:nth-child(10) { animation-delay: 540ms; }
+  .stagger > *:nth-child(11) { animation-delay: 600ms; }
+  .stagger > *:nth-child(12) { animation-delay: 660ms; }
+
+  .orb-pulse {
+    animation: mitra-orb-pulse 2.6s ease-in-out infinite;
+  }
+}
+
+/* Belt-and-braces for reduced motion: also collapse any remaining CSS
+   transitions/animations (incl. Tailwind's own) to effectively instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

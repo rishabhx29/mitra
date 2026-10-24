@@ -2,19 +2,26 @@
 // - orb: two color pickers (Settings.orbColors.a/b) with a live CSS-gradient mini
 //   preview — a plain radial gradient approximates the orb well, avoids mounting a
 //   second WebGL canvas in the settings window, and updates live while dragging.
-// - avatar: .vrm file input (object URL preview-only — persistence of the chosen
-//   path is not in the frozen Settings contract) + embedded license fields parsed
-//   from the GLB meta via settings/vrmMeta.ts → persona/avatar/licenseMeta.ts.
+// - avatar: .vrm upload (accept=".vrm" only — the MIME token grays models out in
+//   Windows dialogs) with extension validation, drag-and-drop, and persistence via
+//   mitra:set-avatar-file: main copies the file into <userData>/avatars/current.vrm,
+//   stores Settings.avatarVrmPath, and returns the bytes for the object-URL preview.
+//   Startup/section-open re-invokes the same channel with the stored path to restore
+//   the preview. Embedded license fields are parsed from the GLB meta via
+//   settings/vrmMeta.ts → persona/avatar/licenseMeta.ts.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import type { PersonaKind, Settings } from '../shared/types';
 import { PersonaStage } from '../persona/PersonaStage';
 import type { VrmLicenseInfo } from '../persona/avatar/licenseMeta';
-import { readVrmLicense } from './vrmMeta';
-import { Badge, Card, RadioCard, Tt } from './ui';
+import { baseName, isValidVrmFileName, readVrmLicense } from './vrmMeta';
+import { getMitra } from './mitraClient';
+import { Badge, Btn, Card, RadioCard, Tt } from './ui';
 import type { SaveFn } from './types';
 
 const SAVE_DEBOUNCE_MS = 250;
+/** Display name for the bundled sample (bytes come from main; only the path does not). */
+const SAMPLE_FILE_NAME = 'Seed-san.vrm';
 
 export default function PersonaPicker({
   settings,
@@ -26,12 +33,12 @@ export default function PersonaPicker({
   save: SaveFn;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="stagger space-y-4">
       <KindCards settings={settings} tt={tt} save={save} />
       {settings.persona === 'orb' ? (
         <OrbSection settings={settings} tt={tt} save={save} />
       ) : (
-        <AvatarSection tt={tt} />
+        <AvatarSection settings={settings} tt={tt} save={save} />
       )}
     </div>
   );
@@ -48,7 +55,7 @@ function KindCards({
 }) {
   const kinds: PersonaKind[] = ['orb', 'avatar'];
   return (
-    <Card title={tt('settings.persona')}>
+    <Card micro={tt('settings.micro.persona')} title={tt('settings.persona')}>
       <div className="flex gap-3" role="radiogroup" aria-label={tt('settings.persona')}>
         {kinds.map((kind) => (
           <RadioCard
@@ -102,7 +109,7 @@ function OrbSection({ settings, tt, save }: { settings: Settings; tt: Tt; save: 
   };
 
   return (
-    <Card title={tt('settings.colors')}>
+    <Card micro={tt('settings.micro.persona')} title={tt('settings.colors')}>
       <div className="flex items-start gap-6">
         <div className="space-y-3">
           {(['a', 'b'] as const).map((which) => (
@@ -112,7 +119,7 @@ function OrbSection({ settings, tt, save }: { settings: Settings; tt: Tt; save: 
                 type="color"
                 value={colors[which]}
                 onChange={(e) => onColor(which, e.target.value)}
-                className="h-8 w-12 cursor-pointer rounded-md border border-zinc-700 bg-transparent"
+                className="focus-orb h-8 w-12 cursor-pointer rounded-md border border-white/10 bg-transparent"
                 aria-label={tt('settings.colors') + ' ' + which.toUpperCase()}
               />
               <code className="font-mono text-[11px] text-zinc-500">{colors[which]}</code>
@@ -120,9 +127,9 @@ function OrbSection({ settings, tt, save }: { settings: Settings; tt: Tt; save: 
           ))}
         </div>
         <div className="flex flex-1 flex-col items-center gap-2">
-          <div className="flex h-36 w-36 items-center justify-center rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black">
+          <div className="flex h-36 w-36 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.03]">
             <div
-              className="h-24 w-24 animate-pulse rounded-full"
+              className="orb-pulse h-24 w-24 rounded-full"
               style={{
                 background: `radial-gradient(circle at 32% 28%, ${colors.a} 0%, ${colors.b} 72%)`,
                 boxShadow: `0 0 40px ${colors.b}66, 0 0 96px ${colors.a}33`,
@@ -136,12 +143,27 @@ function OrbSection({ settings, tt, save }: { settings: Settings; tt: Tt; save: 
   );
 }
 
-function AvatarSection({ tt }: { tt: Tt }) {
+function AvatarSection({
+  settings,
+  tt,
+  save,
+}: {
+  settings: Settings;
+  tt: Tt;
+  save: SaveFn;
+}) {
   const [vrmUrl, setVrmUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [license, setLicense] = useState<VrmLicenseInfo | null>(null);
   const [readingLicense, setReadingLicense] = useState(false);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  // The stored path currently backing vrmUrl — lets the restore effect skip a
+  // reload once the settings prop catches up to what we already preview.
+  const loadedPathRef = useRef<string | null>(null);
 
   // Revoke the previous object URL whenever it is replaced or on unmount.
   useEffect(
@@ -151,7 +173,7 @@ function AvatarSection({ tt }: { tt: Tt }) {
     [],
   );
 
-  // Parse the embedded license out of the chosen file (degrades to null).
+  // Parse the embedded license out of the shown model (degrades to null).
   useEffect(() => {
     if (!vrmUrl) {
       setLicense(null);
@@ -169,59 +191,226 @@ function AvatarSection({ tt }: { tt: Tt }) {
     };
   }, [vrmUrl]);
 
+  // Restore the persisted avatar when the section opens / the stored path changes:
+  // re-invoke the copy IPC with the stored path (idempotent — same source and
+  // destination) and preview the returned bytes. A missing file clears the stale
+  // setting (main reports 'source-missing') instead of erroring on every launch.
+  useEffect(() => {
+    const stored = settings.avatarVrmPath;
+    const mitra = getMitra();
+    if (!stored || !mitra || loadedPathRef.current === stored) return;
+    let cancelled = false;
+    setBusy(true);
+    mitra
+      .setAvatarFile({ kind: 'pick', sourcePath: stored })
+      .then((res) => {
+        if (cancelled) return;
+        setBusy(false);
+        if (res.ok) {
+          applyPreview(res.bytes, baseName(res.path), res.path);
+        } else if (res.error === 'source-missing') {
+          save({ avatarVrmPath: '' }); // '' is dropped by sanitizeSettings → cleared
+          setErrorKey('settings.persona.vrmMissing');
+        } else {
+          setErrorKey('settings.persona.vrmCopyFailed');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBusy(false);
+        setErrorKey('settings.persona.vrmCopyFailed');
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyPreview is stable over refs
+  }, [settings.avatarVrmPath, save]);
+
+  /** Swap the preview to a fresh blob URL built from bytes main copied for us. */
+  const applyPreview = (bytes: ArrayBuffer, name: string, storedPath: string) => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
+    objectUrlRef.current = url;
+    loadedPathRef.current = storedPath;
+    setVrmUrl(url);
+    setFileName(name);
+    setErrorKey(null);
+  };
+
   const onFile = (file: File | undefined) => {
     if (!file) return;
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    const url = URL.createObjectURL(file);
-    objectUrlRef.current = url;
-    setVrmUrl(url);
-    setFileName(file.name);
+    // Client-side gate matching accept=".vrm" (extension only — no MIME).
+    if (!isValidVrmFileName(file.name)) {
+      setErrorKey('settings.persona.vrmInvalid');
+      return;
+    }
+    const mitra = getMitra();
+    if (!mitra) {
+      // Plain-browser preview (window.mitra absent): preview-only, like the old UI.
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      const url = URL.createObjectURL(file);
+      objectUrlRef.current = url;
+      loadedPathRef.current = null;
+      setVrmUrl(url);
+      setFileName(file.name);
+      setErrorKey(null);
+      return;
+    }
+    setErrorKey(null);
+    setBusy(true);
+    void mitra
+      .setAvatarFile({ kind: 'pick', sourcePath: mitra.getPathForFile(file) })
+      .then((res) => {
+        setBusy(false);
+        if (res.ok) {
+          applyPreview(res.bytes, file.name, res.path);
+          // Main already persisted the path; route through save() to sync App
+          // state (and the status.saved toast) via the normal settings flow.
+          save({ avatarVrmPath: res.path });
+        } else {
+          setErrorKey(
+            res.error === 'invalid-extension'
+              ? 'settings.persona.vrmInvalid'
+              : 'settings.persona.vrmCopyFailed',
+          );
+        }
+      })
+      .catch(() => {
+        setBusy(false);
+        setErrorKey('settings.persona.vrmCopyFailed');
+      });
+  };
+
+  const useSample = () => {
+    const mitra = getMitra();
+    if (!mitra || busy) return;
+    setErrorKey(null);
+    setBusy(true);
+    void mitra
+      .setAvatarFile({ kind: 'sample' })
+      .then((res) => {
+        setBusy(false);
+        if (res.ok) {
+          applyPreview(res.bytes, SAMPLE_FILE_NAME, res.path);
+          save({ avatarVrmPath: res.path });
+        } else {
+          setErrorKey(res.error === 'source-missing' ? 'settings.persona.vrmSampleMissing' : 'settings.persona.vrmCopyFailed');
+        }
+      })
+      .catch(() => {
+        setBusy(false);
+        setErrorKey('settings.persona.vrmCopyFailed');
+      });
   };
 
   const unload = () => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = null;
+    loadedPathRef.current = null;
     setVrmUrl(null);
     setFileName(null);
+    setErrorKey(null);
+    save({ avatarVrmPath: '' }); // '' is dropped by sanitizeSettings → cleared
+  };
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    setDragging(true);
+  };
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+  };
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    onFile(e.dataTransfer?.files?.[0]);
   };
 
   return (
-    <Card title={tt('settings.persona.avatar')}>
+    <Card micro={tt('settings.micro.persona')} title={tt('settings.persona.avatar')}>
       <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <label className="cursor-pointer rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700">
-            {tt('settings.persona.vrmFile')}
-            <input
-              type="file"
-              accept=".vrm,model/gltf-binary"
-              className="hidden"
-              onChange={(e) => onFile(e.target.files?.[0])}
-            />
-          </label>
-          {fileName && (
+        {/* Drop zone + preview: accepts a dragged .vrm whether empty or loaded.
+            Hover/active highlight is color-only — respects prefers-reduced-motion. */}
+        <div
+          data-testid="avatar-dropzone"
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`relative h-64 overflow-hidden rounded-2xl border-2 border-dashed transition-colors duration-150 ${
+            dragging
+              ? 'border-sky-400/70 bg-sky-500/10'
+              : vrmUrl
+                ? 'border-white/[0.12] bg-white/[0.03]'
+                : 'border-white/[0.14] bg-white/[0.02] hover:border-white/25'
+          }`}
+        >
+          {vrmUrl ? (
+            <PersonaStage persona="avatar" state="idle" vrmUrl={vrmUrl} licenseVisible={false} />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-500" aria-hidden="true">
+                <path d="M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" strokeLinecap="round" />
+              </svg>
+              <p className="text-sm font-medium text-zinc-200">{tt('settings.persona.vrmDropTitle')}</p>
+              <p className="max-w-xs text-[11px] leading-snug text-zinc-500">{tt('settings.persona.vrmDropHint')}</p>
+              <div className="mt-2 flex items-center gap-2">
+                <Btn variant="primary" disabled={busy} onClick={() => inputRef.current?.click()}>
+                  <span data-testid="avatar-browse">{tt('settings.persona.vrmBrowse')}</span>
+                </Btn>
+                <Btn variant="ghost" disabled={busy} onClick={useSample}>
+                  <span data-testid="avatar-sample">{tt('settings.persona.vrmUseSample')}</span>
+                </Btn>
+              </div>
+            </div>
+          )}
+          {dragging && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-sky-500/10 text-sm font-medium text-sky-200">
+              {tt('settings.persona.vrmDropActive')}
+            </div>
+          )}
+          {/* Single hidden input; both CTAs trigger it. value is reset so picking
+              the same file again still fires onChange. accept=".vrm" ONLY — the
+              model/gltf-binary MIME grays .vrm files out in Windows dialogs. */}
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".vrm"
+            className="hidden"
+            data-testid="avatar-file-input"
+            onChange={(e) => {
+              onFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </div>
+
+        {/* Status row: copy progress, loaded file, unload, inline friendly error. */}
+        <div className="flex min-h-[1.25rem] flex-wrap items-center gap-3">
+          {busy && <Badge tone="muted">{tt('settings.persona.vrmWorking')}</Badge>}
+          {!busy && fileName && (
             <>
-              <span className="truncate text-xs text-zinc-400">
+              <span data-testid="avatar-status" className="truncate text-xs text-zinc-400">
                 {tt('settings.persona.vrmLoaded')}: {fileName}
               </span>
-              <button onClick={unload} className="text-xs text-zinc-500 underline hover:text-zinc-300">
+              <button onClick={unload} className="focus-orb rounded text-xs text-zinc-500 underline hover:text-zinc-300">
                 {tt('settings.persona.vrmUnload')}
               </button>
             </>
           )}
-        </div>
-
-        <div className="relative h-56 overflow-hidden rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-black">
-          {vrmUrl ? (
-            <PersonaStage persona="avatar" state="idle" vrmUrl={vrmUrl} licenseVisible={false} />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="px-6 text-center text-xs text-zinc-500">{tt('settings.persona.vrmFile')}</p>
-            </div>
+          {errorKey && (
+            <span data-testid="avatar-error" role="alert" className="text-xs text-red-300">
+              {tt(errorKey)}
+            </span>
           )}
         </div>
-        {fileName && <p className="text-[11px] text-zinc-500">{tt('settings.persona.vrmPreviewOnly')}</p>}
+        {fileName && !errorKey && (
+          <p className="text-[11px] text-zinc-500">{tt('settings.persona.vrmPersisted')}</p>
+        )}
 
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+        <div className="glass-row p-3">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="text-xs font-semibold text-zinc-200">{tt('settings.persona.license')}</span>
             {readingLicense ? (

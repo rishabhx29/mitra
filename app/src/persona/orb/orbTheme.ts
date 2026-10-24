@@ -34,6 +34,15 @@ export interface OrbStateTheme {
   shapeMorph: number;
   /** 0..1 — how strongly audio amplitude displaces/scales the orb in this state. */
   audioResponse: number;
+  /** 0..1 — brightness of the inner additive-glow core sphere (UI-polish wave). */
+  coreGlow: number;
+  /**
+   * Ambient scale pulse (breathing / thinking undulation / error shudder) —
+   * targetScale += sin(t * speed) * amplitude each frame. States that scale
+   * from audio instead (listening/speaking) leave this unset. UI-polish wave:
+   * per-state pulse tuning, muted under prefers-reduced-motion.
+   */
+  scalePulse?: { amplitude: number; speed: number };
 }
 
 const THEME: OrbStateTheme = {
@@ -48,18 +57,24 @@ const THEME: OrbStateTheme = {
   rotationYSpeed: 0.05,
   shapeMorph: 0,
   audioResponse: 0.15,
+  coreGlow: 0.35,
 };
 
 /**
  * State themes for all SessionStates.
- * - idle:      calm breathing blob in the user's own palette
+ * - idle:      calm breathing blob in the user's own palette, soft inner glow
  * - listening: warm pink-red, gently reactive to microphone amplitude
  * - thinking:  amber, fast undulation + emissive pulse, no audio response
  * - speaking:  teal, liquid-silk morph driven by TTS amplitude
  * - error:     deep red, jittery high-frequency noise + fast pulse
  */
 export const ORB_STATE_THEMES: Record<SessionState, OrbStateTheme> = {
-  idle: THEME,
+  idle: {
+    ...THEME,
+    // Gentle continuous drift on both axes (design brief: rotation drift).
+    rotationXSpeed: 0.015,
+    scalePulse: { amplitude: 0.02, speed: Math.PI / 3 },
+  },
   listening: {
     ...THEME,
     accent: '#ff2d55',
@@ -69,6 +84,7 @@ export const ORB_STATE_THEMES: Record<SessionState, OrbStateTheme> = {
     emissiveIntensity: 0.35,
     rotationYSpeed: 0.1,
     audioResponse: 0.5,
+    coreGlow: 0.5,
   },
   thinking: {
     ...THEME,
@@ -83,6 +99,8 @@ export const ORB_STATE_THEMES: Record<SessionState, OrbStateTheme> = {
     rotationXSpeed: 0.05,
     rotationYSpeed: 0.35,
     audioResponse: 0,
+    coreGlow: 0.75,
+    scalePulse: { amplitude: 0.05, speed: 3 },
   },
   speaking: {
     ...THEME,
@@ -95,6 +113,7 @@ export const ORB_STATE_THEMES: Record<SessionState, OrbStateTheme> = {
     rotationYSpeed: 0.08,
     shapeMorph: 1,
     audioResponse: 0.8,
+    coreGlow: 0.6,
   },
   error: {
     ...THEME,
@@ -108,6 +127,8 @@ export const ORB_STATE_THEMES: Record<SessionState, OrbStateTheme> = {
     rotationXSpeed: 0.02,
     rotationYSpeed: 0.15,
     audioResponse: 0,
+    coreGlow: 0.8,
+    scalePulse: { amplitude: 0.02, speed: 21 },
   },
 };
 

@@ -1,0 +1,3 @@
+- generic [ref=f4e4]:
+  - generic: Press the hotkey to talk
+  - textbox "Type a command…" [ref=f4e11]

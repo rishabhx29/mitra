@@ -1,0 +1,84 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e8]: Mitra
+      - generic [ref=e9]: Mitra Settings
+    - navigation "Mitra Settings" [ref=e10]:
+      - button [ref=e11]
+      - button [ref=e16]
+      - button [ref=e20]
+      - button [ref=e24]
+      - button [ref=e31]
+      - button [ref=e35]
+      - button [ref=e40]
+      - button [ref=e45]
+    - paragraph [ref=e49]: Browser preview — changes are kept in memory only.
+  - main [ref=e50]:
+    - generic [ref=e53]:
+      - generic [ref=e55]:
+        - generic [ref=e56]: Mock
+        - heading "Your desktop, on voice." [level=1] [ref=e58]
+        - paragraph [ref=e59]: Mitra listens, thinks and acts — to-dos, apps, links and code — hands-free.
+        - generic [ref=e60]:
+          - button "Try it — summon Mitra Ctrl Shift Space" [ref=e61]:
+            - text: Try it — summon Mitra
+            - generic [ref=e65]:
+              - generic [ref=e66]: Ctrl
+              - generic [ref=e67]: Shift
+              - generic [ref=e68]: Space
+          - paragraph
+      - generic [ref=e69]:
+        - heading "What Mitra can do" [level=2] [ref=e70]
+        - generic [ref=e71]:
+          - generic [ref=e72]:
+            - heading "Voice control" [level=3] [ref=e77]
+            - paragraph [ref=e78]: Speak naturally — Mitra listens, thinks and replies.
+          - generic [ref=e79]:
+            - heading "Permission-gated apps" [level=3] [ref=e83]
+            - paragraph [ref=e84]: Every tool needs your explicit yes.
+          - generic [ref=e85]:
+            - heading "Notion actions" [level=3] [ref=e89]
+            - paragraph [ref=e90]: “Add milk to my list” lands in your board.
+          - generic [ref=e91]:
+            - heading "opencode agent" [level=3] [ref=e95]
+            - paragraph [ref=e96]: Say “build a snake game” and watch it code.
+          - generic [ref=e97]:
+            - heading "Hindi & Hinglish" [level=3] [ref=e102]
+            - paragraph [ref=e103]: Switch languages mid-sentence — no settings dance.
+          - generic [ref=e104]:
+            - heading "3D persona" [level=3] [ref=e108]
+            - paragraph [ref=e109]: An audio-reactive orb, or your own VRM avatar.
+      - generic [ref=e110]:
+        - generic [ref=e111]:
+          - generic [ref=e112]: Bridge
+          - generic [ref=e113]: Online
+        - generic [ref=e115]:
+          - generic [ref=e116]: Mode
+          - generic [ref=e117]: Mock
+        - generic [ref=e118]:
+          - generic [ref=e119]: Version
+          - generic [ref=e120]: v0.1.0
+        - generic [ref=e121]:
+          - generic [ref=e122]: Hotkey
+          - button "Ctrl Shift Space" [ref=e123]:
+            - generic [ref=e124]: Ctrl
+            - generic [ref=e125]: Shift
+            - generic [ref=e126]: Space
+      - generic [ref=e127]:
+        - heading "How it works" [level=2] [ref=e128]
+        - list [ref=e129]:
+          - listitem [ref=e130]:
+            - generic [ref=e131]: "1"
+            - generic [ref=e132]:
+              - heading "Summon" [level=3] [ref=e133]
+              - paragraph [ref=e134]: Hit the hotkey — the orb appears.
+          - listitem [ref=e135]:
+            - generic [ref=e136]: "2"
+            - generic [ref=e137]:
+              - heading "Speak" [level=3] [ref=e138]
+              - paragraph [ref=e139]: Ask in English, Hindi or Hinglish.
+          - listitem [ref=e140]:
+            - generic [ref=e141]: "3"
+            - generic [ref=e142]:
+              - heading "Granted apps only" [level=3] [ref=e143]
+              - paragraph [ref=e144]: Mitra acts strictly inside your permissions.

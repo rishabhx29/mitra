@@ -39,6 +39,12 @@ export function createLocalFallbackApi(): MitraApi {
     onSessionEvent: () => () => {},
     onOverlayShown: () => () => {},
     onOverlayHidden: () => () => {},
+    // No main process to log to — degrade honestly (mock-mode rule), never throw.
+    reportTranscript: () => {},
+    // Browser preview has no main process to copy files into userData —
+    // degrade honestly (mock-mode rule), never throw.
+    setAvatarFile: async () => ({ ok: false, error: 'copy-failed' }),
+    getPathForFile: () => '',
   };
 }
 

@@ -25,6 +25,7 @@ export default function NotionPanel({
   if (!settings.notion.mock) {
     return (
       <Card
+        micro={tt('settings.micro.notion')}
         title={tt('settings.notion')}
         right={<Badge tone="ok">{tt('settings.notion.connected')}</Badge>}
       >
@@ -79,6 +80,7 @@ function MockBoard({ tt, notionEnabled }: { tt: Tt; notionEnabled: boolean }) {
 
   return (
     <Card
+      micro={tt('settings.micro.notion')}
       title={tt('settings.notion')}
       right={<Badge tone="accent">{tt('settings.notion.mockBadge')}</Badge>}
     >
@@ -97,7 +99,7 @@ function MockBoard({ tt, notionEnabled }: { tt: Tt; notionEnabled: boolean }) {
             {items.map((item) => (
               <li
                 key={item.id}
-                className="flex items-baseline gap-3 rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-zinc-200"
+                className="glass-row flex items-baseline gap-3 px-3 py-2 text-sm text-zinc-200"
               >
                 <span className="flex-1 break-words">{item.text}</span>
                 <time className="shrink-0 font-mono text-[10px] text-zinc-600" dateTime={item.createdAt}>
@@ -110,7 +112,7 @@ function MockBoard({ tt, notionEnabled }: { tt: Tt; notionEnabled: boolean }) {
       )}
 
       <form
-        className="mt-4 flex items-center gap-2 border-t border-zinc-800 pt-4"
+        className="mt-4 flex items-center gap-2 border-t border-white/[0.08] pt-4"
         onSubmit={(e) => {
           e.preventDefault();
           void onAdd();

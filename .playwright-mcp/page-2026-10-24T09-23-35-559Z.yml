@@ -1,0 +1,4 @@
+- generic [ref=f2e4]:
+  - generic: Listening…
+  - generic: Hi, I am Mitra. Try "add milk to my list", "open notepad", or "open opencode and build a snake game".
+  - textbox "Type a command…" [ref=f2e11]

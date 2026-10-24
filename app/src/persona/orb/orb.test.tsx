@@ -177,6 +177,42 @@ describe('orbTheme', () => {
 });
 
 // ---------------------------------------------------------------------------
+// orbTheme — UI-polish wave additions (docs/DESIGN_BRIEF.md §Overlay orb shape)
+// ---------------------------------------------------------------------------
+
+describe('orbTheme inner-core glow + scale pulses (UI-polish wave)', () => {
+  it('defines a core glow for every state within 0..1, strongest on error', () => {
+    for (const state of ALL_STATES) {
+      const glow = ORB_STATE_THEMES[state].coreGlow;
+      expect(glow).toBeGreaterThanOrEqual(0);
+      expect(glow).toBeLessThanOrEqual(1);
+    }
+    expect(ORB_STATE_THEMES.error.coreGlow).toBeGreaterThan(ORB_STATE_THEMES.idle.coreGlow);
+  });
+
+  it('gives ambient scale pulses to the non-audio-driven states only', () => {
+    expect(ORB_STATE_THEMES.idle.scalePulse).toBeDefined();
+    expect(ORB_STATE_THEMES.thinking.scalePulse).toBeDefined();
+    expect(ORB_STATE_THEMES.error.scalePulse).toBeDefined();
+    // listening/speaking scale from audio amplitude instead — no ambient pulse.
+    expect(ORB_STATE_THEMES.listening.scalePulse).toBeUndefined();
+    expect(ORB_STATE_THEMES.speaking.scalePulse).toBeUndefined();
+    for (const state of ALL_STATES) {
+      const pulse = ORB_STATE_THEMES[state].scalePulse;
+      if (pulse) {
+        expect(pulse.amplitude).toBeGreaterThan(0);
+        expect(pulse.speed).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('drifts gently on both axes in idle (continuous rotation drift)', () => {
+    expect(ORB_STATE_THEMES.idle.rotationXSpeed).toBeGreaterThan(0);
+    expect(ORB_STATE_THEMES.idle.rotationYSpeed).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // lipsync — wawa-lipsync viseme → VRM aa/ih/ou/ee/oh mapping
 // ---------------------------------------------------------------------------
 

@@ -52,6 +52,23 @@ export type AddResult =
   | { ok: true; summary: string }
   | { ok: false; summary: string; denied: boolean };
 
+export type HealthResult = { ok: true; mock: boolean } | { ok: false; summary: string };
+
+/**
+ * GET /api/health — liveness + mock mode (src/server/bridge.ts route shape:
+ * { ok, service, mock }). `mock` drives the Home page's provider-mode badge.
+ */
+export async function fetchBridgeHealth(timeoutMs = 2500): Promise<HealthResult> {
+  try {
+    const res = await fetch(`${BASE}/api/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    const body = (await res.json().catch(() => null)) as { ok?: unknown; mock?: unknown } | null;
+    if (body?.ok !== true) return { ok: false, summary: `HTTP ${res.status}` };
+    return { ok: true, mock: body.mock === true };
+  } catch {
+    return { ok: false, summary: 'bridge-offline' };
+  }
+}
+
 /**
  * POST /api/tools/notion_add_todo — the same ACL-gated path the voice agent uses
  * (integration fact: tool responses branch on body.ok; HTTP 403 also carries a

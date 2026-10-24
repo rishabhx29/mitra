@@ -42,6 +42,12 @@ export interface Settings {
   permissions: Permissions;
   apps: AppAlias[];
   notion: NotionConfig;
+  /**
+   * Absolute path of the user's avatar model, copied by main into
+   * <userData>/avatars/current.vrm (mitra:set-avatar-file). Optional so existing
+   * persisted settings and DEFAULT_SETTINGS stay valid; absent/'' = no avatar.
+   */
+  avatarVrmPath?: string;
 }
 
 export interface TranscriptEntry {

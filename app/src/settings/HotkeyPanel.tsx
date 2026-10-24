@@ -64,8 +64,8 @@ export default function HotkeyPanel({
   const accelFor = (accel: string): string[] => accel.split('+').filter(Boolean);
 
   return (
-    <div className="space-y-4">
-      <Card title={tt('settings.hotkey')} help={tt('settings.hotkey.saveHint')}>
+    <div className="stagger space-y-4">
+      <Card micro={tt('settings.micro.hotkey')} title={tt('settings.hotkey')} help={tt('settings.hotkey.saveHint')}>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-zinc-400">{tt('settings.hotkey.current')}</span>
           <span className="flex items-center gap-1">
@@ -94,7 +94,7 @@ export default function HotkeyPanel({
           </p>
         )}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[0.08] pt-4">
           <span className="text-xs text-zinc-400">{tt('settings.hotkey.suggestions')}</span>
           {HOTKEY_SUGGESTIONS.map((s) => (
             <button
@@ -104,7 +104,7 @@ export default function HotkeyPanel({
                 setHint(null);
                 setRecording(false);
               }}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 font-mono text-[11px] text-zinc-300 transition-colors hover:border-sky-500/60 hover:text-sky-300"
+              className="chip focus-orb px-2.5 py-1 font-mono text-[11px] text-zinc-300"
             >
               {s}
             </button>

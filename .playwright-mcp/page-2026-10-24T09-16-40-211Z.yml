@@ -1,0 +1,188 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - link "Dasho — home" [ref=e5] [cursor=pointer]:
+        - /url: "#top"
+        - text: dasho
+      - navigation "Site" [ref=e7]:
+        - link "Why Dasho" [ref=e8] [cursor=pointer]:
+          - /url: "#features"
+        - link "Download" [ref=e9] [cursor=pointer]:
+          - /url: "#download"
+        - link "GitHub" [ref=e10] [cursor=pointer]:
+          - /url: https://github.com/dashoapp/dasho
+        - link "Get Dasho" [ref=e11] [cursor=pointer]:
+          - /url: "#download"
+  - main [ref=e12]:
+    - generic [ref=e14]:
+      - heading "Files that move" [level=1] [ref=e15]: Files that move.
+      - paragraph [ref=e16]: 40 GB of trip pics, the whole semester folder, tonight’s 12 GB render. Dasho sends it all straight to the device next to you at local-network speed. No cloud, no size limits, no accounts.
+      - generic [ref=e17]:
+        - link "Download Dasho" [ref=e18] [cursor=pointer]:
+          - /url: "#download"
+        - link "Star on GitHub" [ref=e19] [cursor=pointer]:
+          - /url: https://github.com/dashoapp/dasho
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - term [ref=e22]: Price
+          - definition [ref=e23]: Free forever, no pro tier
+        - generic [ref=e24]:
+          - term [ref=e25]: License
+          - definition [ref=e26]: MIT OR Apache-2.0
+        - generic [ref=e27]:
+          - term [ref=e28]: Platforms
+          - definition [ref=e29]: Windows, macOS, Linux
+        - generic [ref=e30]:
+          - term [ref=e31]: Your files
+          - definition [ref=e32]: Never touch a server
+    - region [ref=e33]:
+      - generic [ref=e34]:
+        - heading "Not another sharing app" [level=2] [ref=e35]
+        - paragraph [ref=e36]: "Simple local sharing is a solved problem. Dasho is built for the transfers that hurt: huge, flaky, cross-network, or no app on the other end."
+        - generic [ref=e37]:
+          - article [ref=e38]:
+            - generic [ref=e39]:
+              - heading "Speed, with receipts" [level=3] [ref=e40]
+              - paragraph [ref=e41]: One stream is how other apps crawl through a Wi-Fi link. Dasho opens many in parallel, packs small files into batches, and skips bytes it has already sent. The benchmark harness that proves it ships with the engine, so every speed claim can be rerun.
+          - article [ref=e44]:
+            - generic [ref=e45]:
+              - heading "A transfer that refuses to die" [level=3] [ref=e46]
+              - paragraph [ref=e47]: Close the lid, lose the Wi-Fi, reboot halfway through. Dasho picks up from the exact byte where it stopped, across sleeps, network switches, and restarts. Every file ends with a checksum receipt, so what landed is what left.
+            - img [aria-hidden] [ref=e49]:
+              - generic [ref=e52]: sleep
+              - generic [ref=e53]: network switch
+          - article [ref=e54]:
+            - generic [ref=e55]:
+              - heading "Your devices, one mesh" [level=3] [ref=e56]
+              - paragraph [ref=e57]: Pair your laptop, desktop, and the rest once and they stay connected, across the room or across networks. No cables, no uploads, no cloud sitting in the middle of your own files.
+          - article [ref=e69]:
+            - generic [ref=e70]:
+              - heading "They don’t need to install anything" [level=3] [ref=e71]
+              - paragraph [ref=e72]: Sending to someone without Dasho? Show them a QR code and their browser becomes the receiver. Files still arrive verified, byte for byte. There’s also a portable single-file build that runs off a USB stick.
+    - region [ref=e100]:
+      - generic [ref=e101]:
+        - heading "Three steps, zero setup" [level=2] [ref=e102]
+        - paragraph [ref=e103]: No accounts to make, no rooms to join, no six-digit codes read aloud across the desk.
+        - list [ref=e104]:
+          - listitem [ref=e105]:
+            - generic [aria-hidden] [ref=e106]: "1"
+            - generic [ref=e107]:
+              - heading "Install the app" [level=3] [ref=e108]
+              - paragraph [ref=e109]: A few megabytes on Windows, macOS, or Linux. No account, no setup wizard, no restart.
+          - listitem [ref=e110]:
+            - generic [aria-hidden] [ref=e111]: "2"
+            - generic [ref=e112]:
+              - heading "Point it at the other device" [level=3] [ref=e113]
+              - paragraph [ref=e114]: Devices on your network show up on their own. Somewhere else? Pair once and the mesh handles the rest.
+          - listitem [ref=e115]:
+            - generic [aria-hidden] [ref=e116]: "3"
+            - generic [ref=e117]:
+              - heading "Send, then watch it land" [level=3] [ref=e118]
+              - paragraph [ref=e119]: Pick your files and hit send. Progress per file, then a receipt that says every byte checked out.
+    - region [ref=e120]:
+      - generic [ref=e121]:
+        - heading "Fastest is a claim. Here come the numbers." [level=2] [ref=e122]
+        - paragraph [ref=e123]: "The benchmark harness is being built alongside the engine, because a speed claim without a rerunnable test is just marketing. When v1 ships, this section gets published results: Dasho against LocalSend and scp, across three scenarios."
+        - list [ref=e124]:
+          - listitem [ref=e125]:
+            - generic [ref=e126]: One 20 GB file
+            - generic [ref=e128]: measured soon
+          - listitem [ref=e129]:
+            - generic [ref=e130]: Ten thousand small files
+            - generic [ref=e132]: measured soon
+          - listitem [ref=e133]:
+            - generic [ref=e134]: Resume after sleep
+            - generic [ref=e136]: measured soon
+        - paragraph [ref=e137]: Nothing above is a result. The moment real numbers exist, they land here with the script that produced them.
+    - region [ref=e138]:
+      - generic [ref=e139]:
+        - heading "Get Dasho" [level=2] [ref=e140]
+        - paragraph [ref=e141]: Free for Windows, macOS, and Linux. v1 isn’t published yet, so nothing below points at a download that doesn’t exist. Watch the repo, or leave your address and we’ll tell you the day it ships.
+        - generic [ref=e142]:
+          - article [ref=e143]:
+            - generic [ref=e144]: your platform
+            - heading "Windows" [level=3] [ref=e145]
+            - paragraph [ref=e146]: Installer, a few megabytes.
+            - generic [ref=e147]: Download for Windows
+          - article [ref=e148]:
+            - generic [ref=e149]: coming with v1
+            - heading "macOS" [level=3] [ref=e150]
+            - paragraph [ref=e151]: Apple silicon and Intel.
+            - generic [ref=e152]: Download for macOS
+          - article [ref=e153]:
+            - generic [ref=e154]: coming with v1
+            - heading "Linux" [level=3] [ref=e155]
+            - paragraph [ref=e156]: AppImage and .deb.
+            - generic [ref=e157]: Download for Linux
+        - generic [ref=e158]:
+          - link "Tell me when it ships" [ref=e159] [cursor=pointer]:
+            - /url: mailto:hello@dasho.tech?subject=Tell%20me%20when%20Dasho%20ships
+          - link "or watch releases on GitHub" [ref=e160] [cursor=pointer]:
+            - /url: https://github.com/dashoapp/dasho
+    - region [ref=e161]:
+      - generic [ref=e163]:
+        - generic [ref=e164]:
+          - heading "Open source, open books" [level=2] [ref=e165]
+          - paragraph [ref=e166]: Dasho is free software under MIT OR Apache-2.0. The whole thing lives on GitHub, the transfer engine is a separate crate you can read, and nothing about it phones home. You don’t have to take our word for any of that; the code is right there.
+          - link "Read the source" [ref=e167] [cursor=pointer]:
+            - /url: https://github.com/dashoapp/dasho
+        - list [ref=e168]:
+          - listitem [ref=e169]:
+            - heading "No cloud" [level=3] [ref=e170]
+            - paragraph [ref=e171]: Transfers go device to device over your own networks. There is no server in the middle, because there is no server.
+          - listitem [ref=e172]:
+            - heading "No accounts" [level=3] [ref=e173]
+            - paragraph [ref=e174]: Install, open, send. No sign-up, no email, no friends list to rebuild.
+          - listitem [ref=e175]:
+            - heading "No telemetry" [level=3] [ref=e176]
+            - paragraph [ref=e177]: Nothing reports back, ever. The network tab is boring, and you can verify that yourself.
+    - region [ref=e178]:
+      - generic [ref=e179]:
+        - heading "Questions people actually ask" [level=2] [ref=e180]
+        - generic [ref=e181]:
+          - group [ref=e182]:
+            - generic "Is Dasho safe to use?" [ref=e183] [cursor=pointer]
+          - group [ref=e184]:
+            - generic "What happens if my laptop sleeps mid-transfer?" [ref=e185] [cursor=pointer]
+          - group [ref=e186]:
+            - generic "Which platforms does it run on?" [ref=e187] [cursor=pointer]
+          - group [ref=e188]:
+            - generic "Is it really free? What’s the catch?" [ref=e189] [cursor=pointer]
+          - group [ref=e190]:
+            - generic "How is this different from AirDrop or LocalSend?" [ref=e191] [cursor=pointer]
+          - group [ref=e192]:
+            - generic "Do we both need the app installed?" [ref=e193] [cursor=pointer]
+  - contentinfo [ref=e194]:
+    - generic [ref=e195]:
+      - generic [ref=e196]:
+        - generic [ref=e197]:
+          - link "Dasho — back to top" [ref=e198] [cursor=pointer]:
+            - /url: "#top"
+            - text: dasho
+          - paragraph [ref=e200]: Files that move. Free, forever — MIT OR Apache-2.0, no cloud, no telemetry.
+        - navigation "Site" [ref=e201]:
+          - heading "Site" [level=3] [ref=e202]
+          - link "Why Dasho" [ref=e203] [cursor=pointer]:
+            - /url: "#features"
+          - link "Benchmarks" [ref=e204] [cursor=pointer]:
+            - /url: "#benchmarks"
+          - link "Download" [ref=e205] [cursor=pointer]:
+            - /url: "#download"
+          - link "FAQ" [ref=e206] [cursor=pointer]:
+            - /url: "#faq"
+        - navigation "Project" [ref=e207]:
+          - heading "Project" [level=3] [ref=e208]
+          - link "GitHub" [ref=e209] [cursor=pointer]:
+            - /url: https://github.com/dashoapp/dasho
+          - link "Releases" [ref=e210] [cursor=pointer]:
+            - /url: https://github.com/dashoapp/dasho/releases
+          - link "License" [ref=e211] [cursor=pointer]:
+            - /url: https://github.com/dashoapp/dasho/blob/main/LICENSE
+        - generic [ref=e212]:
+          - heading "Contact" [level=3] [ref=e213]
+          - link "hello@dasho.tech" [ref=e214] [cursor=pointer]:
+            - /url: mailto:hello@dasho.tech
+          - generic [ref=e215]: dasho.tech
+      - paragraph [ref=e216]: © 2026 Dasho. v1 in the works — follow along on GitHub.

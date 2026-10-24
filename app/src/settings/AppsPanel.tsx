@@ -39,8 +39,9 @@ export default function AppsPanel({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="stagger space-y-4">
       <Card
+        micro={tt('settings.micro.apps')}
         title={tt('settings.apps')}
         right={dirty ? <Badge tone="accent">{tt('settings.apps.dirtyHint')}</Badge> : undefined}
       >
@@ -49,7 +50,7 @@ export default function AppsPanel({
         ) : (
           <ul className="space-y-2">
             {draft.map((alias, index) => (
-              <li key={index} className="flex items-center gap-2">
+              <li key={index} className="glass-row flex items-center gap-2 px-2.5 py-2">
                 <input
                   value={alias.name}
                   onChange={(e) => dispatch({ type: 'update', index, name: e.target.value })}
@@ -73,7 +74,7 @@ export default function AppsPanel({
         )}
 
         <form
-          className="mt-4 flex items-center gap-2 border-t border-zinc-800 pt-4"
+          className="mt-4 flex items-center gap-2 border-t border-white/[0.08] pt-4"
           onSubmit={(e) => {
             e.preventDefault();
             onAdd();

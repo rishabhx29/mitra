@@ -1,0 +1,4 @@
+- generic [ref=f2e4]:
+  - generic: Press the hotkey to talk
+  - generic: No speech detected
+  - textbox "Type a command…" [ref=f2e11]

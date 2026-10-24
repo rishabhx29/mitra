@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { extractLicenseMeta } from '../persona/avatar/licenseMeta';
-import { extractVrmMetaObject, parseGlbJson } from './vrmMeta';
+import { baseName, extractVrmMetaObject, isValidVrmFileName, parseGlbJson } from './vrmMeta';
 
 const GLB_MAGIC = 0x46546c67;
 const JSON_CHUNK = 0x4e4f534a;
@@ -89,5 +89,67 @@ describe('end-to-end: GLB → VRM meta → license info', () => {
     const info = extractLicenseMeta(extractVrmMetaObject(parseGlbJson(makeGlb(gltf))));
     expect(info?.title).toBe('Aria');
     expect(info?.licenseUrl).toBe('https://example.com/lic');
+  });
+
+  // Raw glTF files carry NO metaVersion (three-vrm injects it when building vrm.meta).
+  // Shape mirrors the bundled Seed-san sample (assets/avatars/Seed-san.vrm), whose
+  // attribution must surface in the settings license panel.
+  it('surfaces a VRM 1.0 license from raw meta without metaVersion (Seed-san shape)', () => {
+    const gltf = {
+      extensions: {
+        VRMC_vrm: {
+          specVersion: '1.0',
+          meta: {
+            authors: ['VirtualCast, Inc.'],
+            avatarPermission: 'everyone',
+            commercialUsage: 'corporation',
+            copyrightInformation: 'VirtualCast, Inc.',
+            creditNotation: 'required',
+            licenseUrl: 'https://vrm.dev/licenses/1.0/',
+            name: 'Seed-san',
+            version: '1',
+          },
+        },
+      },
+    };
+    const info = extractLicenseMeta(extractVrmMetaObject(parseGlbJson(makeGlb(gltf))));
+    expect(info?.title).toBe('Seed-san');
+    expect(info?.authors).toEqual(['VirtualCast, Inc.']);
+    expect(info?.copyright).toBe('VirtualCast, Inc.');
+    expect(info?.licenseUrl).toBe('https://vrm.dev/licenses/1.0/');
+    expect(info?.usageNotes.join(' · ')).toContain('Credit: required');
+  });
+});
+
+describe('isValidVrmFileName', () => {
+  it('accepts .vrm in any case with a non-empty stem', () => {
+    expect(isValidVrmFileName('model.vrm')).toBe(true);
+    expect(isValidVrmFileName('MODEL.VRM')).toBe(true);
+    expect(isValidVrmFileName('my avatar v3.vrm')).toBe(true);
+  });
+
+  it('rejects other extensions, path separators, and junk', () => {
+    expect(isValidVrmFileName('model.glb')).toBe(false);
+    expect(isValidVrmFileName('model.gltf')).toBe(false);
+    expect(isValidVrmFileName('model.vrmx')).toBe(false);
+    expect(isValidVrmFileName('vrm')).toBe(false);
+    expect(isValidVrmFileName('.vrm')).toBe(false); // no stem
+    expect(isValidVrmFileName('')).toBe(false);
+    expect(isValidVrmFileName('C:\\evil\\model.vrm')).toBe(false); // a name, not a path
+    expect(isValidVrmFileName('../../model.vrm')).toBe(false);
+  });
+});
+
+describe('baseName', () => {
+  it('returns the last segment of Windows and POSIX paths', () => {
+    expect(baseName('C:\\Users\\u\\AppData\\Roaming\\mitra\\avatars\\current.vrm')).toBe('current.vrm');
+    expect(baseName('/home/u/avatars/current.vrm')).toBe('current.vrm');
+    expect(baseName('model.vrm')).toBe('model.vrm');
+  });
+
+  it('degrades to the input (or empty) instead of throwing', () => {
+    expect(baseName('C:\\')).toBe('C:'); // drive root → drive label
+    expect(baseName('/')).toBe('');
+    expect(baseName('')).toBe('');
   });
 });

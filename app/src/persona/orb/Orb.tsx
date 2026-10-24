@@ -13,7 +13,12 @@ import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { SessionState } from '../../shared/types';
-import { ORB_FRAGMENT_SHADER, ORB_VERTEX_SHADER } from './orbShaders';
+import {
+  ORB_CORE_FRAGMENT_SHADER,
+  ORB_CORE_VERTEX_SHADER,
+  ORB_FRAGMENT_SHADER,
+  ORB_VERTEX_SHADER,
+} from './orbShaders';
 import { orbThemeForState, resolveOrbColors } from './orbTheme';
 import { SmoothedValue } from './SmoothedValue';
 
@@ -47,6 +52,7 @@ export function Orb({
   amplitudeRef,
 }: OrbProps) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const coreRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
   // Latest props for useFrame (avoids stale closures and re-registering).
@@ -56,6 +62,19 @@ export function Orb({
   amplitudePropRef.current = amplitude;
   const externalRef = useRef<RefObject<number> | null>(null);
   externalRef.current = amplitudeRef ?? null;
+
+  // Ambient motion gate (docs/DESIGN_BRIEF.md: respect prefers-reduced-motion).
+  // When reduced: no rotation drift, no breathing/shudder pulses, no core
+  // heartbeat — the glow and shape go static. Audio-reactive response and the
+  // state palette stay: they are directly user-driven, not ambient motion.
+  const ambientMotion = useMemo(() => {
+    try {
+      if (typeof window === 'undefined' || !window.matchMedia) return true;
+      return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      return true;
+    }
+  }, []);
 
   // Resolve the palette for the current state (pure string math in orbTheme).
   const colorTargets = useMemo(() => {
@@ -89,6 +108,31 @@ export function Orb({
 
   useEffect(() => () => material.dispose(), [material]);
 
+  // Inner additive-glow core material (design brief §Overlay "Orb shape"):
+  // depthTest off + AdditiveBlending + transparent → drawn after the opaque
+  // shell, so the ~0.5-scale sphere reads as a light from within the orb.
+  const coreMaterial = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: ORB_CORE_VERTEX_SHADER,
+        fragmentShader: ORB_CORE_FRAGMENT_SHADER,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+        uniforms: {
+          uTime: { value: 0 },
+          uAudio: { value: 0 },
+          uColorA: { value: new THREE.Color('#4f8cff') },
+          uColorB: { value: new THREE.Color('#b26bff') },
+          uCoreIntensity: { value: 0.35 },
+        },
+      }),
+    [],
+  );
+
+  useEffect(() => () => coreMaterial.dispose(), [coreMaterial]);
+
   // Smoothed uniform channels — adapted from samantha-ui SoulOrb.jsx.
   const smoothed = useMemo(
     () => ({
@@ -99,6 +143,7 @@ export function Orb({
       pulseIntensity: new SmoothedValue(0),
       shapeMorph: new SmoothedValue(0),
       fresnelPower: new SmoothedValue(2.5),
+      coreGlow: new SmoothedValue(0.35),
       scale: new SmoothedValue(1),
       positionY: new SmoothedValue(0),
       rotationX: new SmoothedValue(0), // used as accumulators (rotation drifts)
@@ -147,27 +192,26 @@ export function Orb({
       : 0;
     u.uEmissiveIntensity.value = Math.max(0, smoothed.emissiveBase.update(delta, 0.5) + pulse);
 
-    // State-specific motion (ported from SoulOrb.jsx useFrame).
+    // State-specific motion (ported from SoulOrb.jsx useFrame; UI-polish wave:
+    // the scale pulses are theme-driven — orbTheme.scalePulse — and muted
+    // under prefers-reduced-motion; audio response stays, it is user-driven).
     let targetScale = theme.scale;
     let targetPositionY = 0;
 
     if (current === 'idle') {
-      // Gentle hover + breathing.
-      targetPositionY += Math.sin(t * 0.25) * 0.05;
-      targetScale += Math.sin(t * (Math.PI / 3)) * 0.02;
+      // Gentle hover.
+      if (ambientMotion) targetPositionY += Math.sin(t * 0.25) * 0.05;
     } else if (current === 'listening') {
       // Subtle reactive scale from mic amplitude.
       targetScale += clamp01(amplitude) * 0.08;
-      targetPositionY += Math.sin(t * 0.25) * 0.03;
+      if (ambientMotion) targetPositionY += Math.sin(t * 0.25) * 0.03;
     } else if (current === 'speaking') {
       // Silk tips do the work; keep global scale response modest.
       targetScale = 1 + clamp01(amplitude) * 0.1;
-    } else if (current === 'thinking') {
-      // Deeper, faster breathing.
-      targetScale += Math.sin(t * 3) * 0.05;
-    } else if (current === 'error') {
-      // Nervous shudder.
-      targetScale += Math.sin(t * 21) * 0.02;
+    }
+    // Ambient scale pulse: idle breathing / thinking undulation / error shudder.
+    if (theme.scalePulse && ambientMotion) {
+      targetScale += Math.sin(t * theme.scalePulse.speed) * theme.scalePulse.amplitude;
     }
 
     smoothed.scale.set(targetScale);
@@ -186,17 +230,36 @@ export function Orb({
     u.uColorA.value.lerp(colorTargets.a, clamp01(delta * colorSpeed));
     u.uColorB.value.lerp(colorTargets.b, clamp01(delta * colorSpeed));
 
-    // Continuous rotation drift (accumulators, like the reference).
-    smoothed.rotationX.value += delta * theme.rotationXSpeed;
-    smoothed.rotationY.value += delta * theme.rotationYSpeed;
+    // Continuous rotation drift (accumulators, like the reference) — muted
+    // under prefers-reduced-motion.
+    const drift = ambientMotion ? 1 : 0;
+    smoothed.rotationX.value += delta * theme.rotationXSpeed * drift;
+    smoothed.rotationY.value += delta * theme.rotationYSpeed * drift;
     mesh.rotation.x = smoothed.rotationX.value;
     mesh.rotation.y = smoothed.rotationY.value;
+
+    // Inner core: per-state glow base (smoothed), the shared palette and the
+    // smoothed audio. Its heartbeat clock freezes when motion is reduced —
+    // the glow stays, just static.
+    const cu = coreMaterial.uniforms;
+    cu.uTime.value = ambientMotion ? t : 0;
+    cu.uAudio.value = u.uAudio.value;
+    cu.uColorA.value.copy(u.uColorA.value);
+    cu.uColorB.value.copy(u.uColorB.value);
+    smoothed.coreGlow.set(theme.coreGlow);
+    cu.uCoreIntensity.value = smoothed.coreGlow.update(delta, 2);
   });
 
   return (
     <mesh ref={meshRef}>
       <sphereGeometry args={[1, 128, 128]} />
       <primitive object={material} attach="material" />
+      {/* Inner additive-glow core (~0.5 scale, design brief) — a child so it
+          inherits the shell's breathing/rotation and reads as lit-from-within. */}
+      <mesh ref={coreRef} scale={0.5}>
+        <sphereGeometry args={[1, 48, 48]} />
+        <primitive object={coreMaterial} attach="material" />
+      </mesh>
     </mesh>
   );
 }

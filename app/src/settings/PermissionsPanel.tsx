@@ -31,13 +31,17 @@ export default function PermissionsPanel({
   const activeCount = GATES.filter((g) => permissions[g]).length;
 
   return (
-    <div className="space-y-4">
-      <Card title={tt('settings.permissions')} help={tt('settings.permissions.help')}>
-        <ul className="divide-y divide-zinc-800/70">
+    <div className="stagger space-y-4">
+      <Card
+        micro={tt('settings.micro.permissions')}
+        title={tt('settings.permissions')}
+        help={tt('settings.permissions.help')}
+      >
+        <ul className="space-y-2">
           {GATES.map((gate) => {
             const active = permissions[gate];
             return (
-              <li key={gate} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+              <li key={gate} className="glass-row flex items-center gap-3 px-3 py-2.5">
                 <Toggle
                   checked={active}
                   label={tt(`perm.${gate}`)}

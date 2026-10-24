@@ -10,6 +10,10 @@
 // - `uColorPrimary`/`uColorSecondary` → `uColorA`/`uColorB` (user-customizable)
 // - added `uState` (0 idle, 1 listening, 2 thinking, 3 speaking, 4 error) which
 //   drives a high-frequency surface jitter in the error state.
+// - UI-polish wave (docs/DESIGN_BRIEF.md §Overlay "Orb shape"): dual-frequency
+//   simplex — a slow low-frequency swell is layered under the detail noise for
+//   a softer, more organic blob; plus the inner additive-glow core shaders
+//   (ORB_CORE_*) drawn over the shell so the orb appears lit from within.
 
 /** uState index mapping — keep in sync with orbTheme. */
 export const ORB_STATE_UNIFORM_INDEX = {
@@ -140,10 +144,17 @@ void main() {
 
   // Pattern for fragment shader
   float noise = snoise(position * uNoiseFrequency + uTime * 0.2);
-  vPattern = noise;
+
+  // Dual-frequency surface (design brief): a slow, low-frequency swell layered
+  // under the detail noise — large soft lobes that drift far slower than the
+  // detail noise, making the blob read organic instead of fizzy.
+  float lowFreq = snoise(position * 0.35 + uTime * 0.06);
+
+  // Keep the color-mix pattern within [-1, 1] after blending the two octaves.
+  vPattern = clamp(noise * 0.8 + lowFreq * 0.2, -1.0, 1.0);
 
   // --- 1. BLOB LOGIC (idle/listening/thinking/error) ---
-  float baseDisplacement = noise * uNoiseAmplitude;
+  float baseDisplacement = noise * uNoiseAmplitude + lowFreq * uNoiseAmplitude * 0.55;
 
   float speechNoise1 = snoise(position * 3.0 + uTime * 6.0);
   float speechNoise2 = snoise(position * 1.5 + uTime * 4.0);
@@ -168,7 +179,9 @@ void main() {
   // High-pass filter on the flow to get the "tips" or outward edges
   float tips = smoothstep(0.0, 0.8, flow);
 
-  float silkDisplacement = (flow * 0.1) + (uAudio * tips * 0.3) + (uAudio * ripples * 0.02);
+  // The low-frequency swell rides the silk shape too (slow breathing under the flow).
+  float silkDisplacement =
+    (flow * 0.1) + (lowFreq * 0.05) + (uAudio * tips * 0.3) + (uAudio * ripples * 0.02);
 
   // --- 3. BLEND ---
   float finalDisplacement = mix(totalBlobDisplacement, silkDisplacement, uShapeMorph);
@@ -207,5 +220,45 @@ void main() {
   vec3 emissive = uColorB * uEmissiveIntensity * (fresnel + vPattern * 0.2);
 
   gl_FragColor = vec4(color + emissive, 1.0);
+}
+`;
+
+// Inner additive-glow core (design brief §Overlay "Orb shape"): a ~0.5-scale
+// sphere drawn OVER the opaque shell (depthTest off + AdditiveBlending) so it
+// reads as a soft light from within the orb. No noise — facing-ratio falloff
+// only, brightest dead-center (an inner heart, not another rim).
+export const ORB_CORE_VERTEX_SHADER = /* glsl */ `
+varying vec3 vNormal;
+varying vec3 vViewPosition;
+
+void main() {
+  vNormal = normalMatrix * normal;
+  vViewPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+export const ORB_CORE_FRAGMENT_SHADER = /* glsl */ `
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform float uCoreIntensity; // 0..1 per-state base brightness (orbTheme.coreGlow)
+uniform float uAudio;         // smoothed 0..1 amplitude
+uniform float uTime;          // frozen under prefers-reduced-motion (static glow)
+
+varying vec3 vNormal;
+varying vec3 vViewPosition;
+
+void main() {
+  vec3 normal = normalize(vNormal);
+  vec3 viewDir = normalize(-vViewPosition);
+
+  // Facing ratio: 1 at the sphere's center, 0 at the silhouette → soft radial falloff.
+  float facing = pow(max(dot(viewDir, normal), 0.0), 1.6);
+
+  // Gentle heartbeat + a modest audio lift (scaled 0..~1.5, clamped below).
+  float beat = 0.85 + 0.15 * sin(uTime * 1.8) + uAudio * 0.5;
+
+  vec3 coreColor = mix(uColorA, uColorB, 0.65);
+  gl_FragColor = vec4(coreColor, clamp(uCoreIntensity * facing * beat, 0.0, 1.0));
 }
 `;

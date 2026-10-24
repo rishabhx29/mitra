@@ -11,12 +11,15 @@ import { getMitra } from './mitraClient';
 import { appendRow, eventToRow, formatClock, type LogRow } from './transcriptModel';
 import { Card, Tt } from './ui';
 
+// Role badge colors reuse the session-state vocabulary (DESIGN_BRIEF.md
+// §"Accent system" state colors via the @theme tokens in index.css):
+// user → listening, agent → speaking, tool failure → error.
 const ROLE_STYLES: Record<'user' | 'agent' | 'system' | 'tool-ok' | 'tool-fail', string> = {
-  user: 'bg-sky-500/15 text-sky-300',
-  agent: 'bg-violet-500/15 text-violet-300',
-  system: 'bg-zinc-700/40 text-zinc-300',
+  user: 'bg-state-listening/15 text-state-listening',
+  agent: 'bg-state-speaking/15 text-state-speaking',
+  system: 'bg-white/10 text-zinc-300',
   'tool-ok': 'bg-emerald-500/10 text-emerald-300',
-  'tool-fail': 'bg-red-500/10 text-red-300',
+  'tool-fail': 'bg-state-error/10 text-state-error',
 };
 
 export default function TranscriptLog({ tt, visible }: { tt: Tt; visible: boolean }) {
@@ -43,18 +46,18 @@ export default function TranscriptLog({ tt, visible }: { tt: Tt; visible: boolea
   }, [rows, visible]);
 
   return (
-    <Card title={tt('settings.transcript')}>
+    <Card micro={tt('settings.micro.transcript')} title={tt('settings.transcript')}>
       {!hasLiveSource && (
-        <p className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-500">
+        <p className="glass-row mb-3 px-3 py-2 text-xs text-zinc-500">
           {tt('settings.transcript.desktopOnly')}
         </p>
       )}
-      <div ref={scrollRef} className="max-h-[26rem] space-y-1.5 overflow-y-auto pr-1">
+      <div ref={scrollRef} data-testid="mitra-transcript-log" className="max-h-[26rem] space-y-1.5 overflow-y-auto pr-1">
         {rows.length === 0 ? (
           <p className="py-3 text-xs text-zinc-500">{tt('settings.transcript.empty')}</p>
         ) : (
           rows.map((row, i) => (
-            <div key={i} className="flex items-start gap-3 rounded-lg bg-zinc-950/60 px-3 py-2">
+            <div key={i} className="glass-row flex items-start gap-3 px-3 py-2">
               <time className="mt-0.5 shrink-0 font-mono text-[10px] text-zinc-600">
                 {formatClock(row.ts)}
               </time>

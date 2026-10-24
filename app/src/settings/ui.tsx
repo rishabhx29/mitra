@@ -1,26 +1,34 @@
-// Shared dark-theme primitives for the settings UI (Task E). Tailwind v4, no
-// component library — small hand-rolled pieces keep the panel files readable.
+// Shared dark-theme primitives for the settings UI (Task E; UI-polish wave:
+// glass/depth system per docs/DESIGN_BRIEF.md — orb-gradient accents driven by
+// the --orb-a/--orb-b CSS vars set on the settings root in App.tsx). Tailwind
+// v4, no component library — small hand-rolled pieces keep panels readable.
 
 import type { ReactNode } from 'react';
 
 export type Tt = (key: string) => string;
 
 export function Card({
+  micro,
   title,
   help,
   right,
   children,
 }: {
+  /** Uppercase micro-label above the title (brief §"Type"). */
+  micro?: string;
   title?: string;
   help?: string;
   right?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+    <section className="glass-card p-5">
+      {micro && (
+        <p className="mb-1.5 text-[11px] uppercase tracking-[0.14em] text-zinc-500">{micro}</p>
+      )}
       {(title || right) && (
         <div className="mb-1 flex items-center justify-between gap-3">
-          {title && <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>}
+          {title && <h3 className="text-sm font-semibold text-zinc-50">{title}</h3>}
           {right}
         </div>
       )}
@@ -46,9 +54,17 @@ export function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
-        checked ? 'border-sky-500/60 bg-sky-600/80' : 'border-zinc-700 bg-zinc-800'
+      className={`focus-orb relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-150 ${
+        checked ? 'border-transparent' : 'border-white/10 bg-white/5'
       }`}
+      style={
+        checked
+          ? {
+              background: 'linear-gradient(135deg, var(--orb-a), var(--orb-b))',
+              boxShadow: '0 0 12px color-mix(in oklab, var(--orb-b) 35%, transparent)',
+            }
+          : undefined
+      }
     >
       <span
         className={`absolute top-0.5 h-[1.125rem] w-[1.125rem] rounded-full bg-white shadow transition-all duration-150 ${
@@ -78,11 +94,20 @@ export function RadioCard({
       role="radio"
       aria-checked={selected}
       onClick={onClick}
-      className={`flex flex-1 flex-col items-center gap-2 rounded-xl border p-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+      className={`focus-orb flex flex-1 flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors ${
         selected
-          ? 'border-sky-500/70 bg-sky-500/10'
-          : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900'
+          ? 'border-transparent bg-white/[0.06]'
+          : 'border-white/[0.08] bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
       }`}
+      style={
+        selected
+          ? {
+              borderColor: 'color-mix(in oklab, var(--orb-a) 55%, transparent)',
+              background: 'color-mix(in oklab, var(--orb-a) 10%, rgb(255 255 255 / 3%))',
+              boxShadow: '0 0 18px color-mix(in oklab, var(--orb-a) 22%, transparent)',
+            }
+          : undefined
+      }
     >
       <div className="flex h-16 w-16 items-center justify-center">{visual}</div>
       <span className="text-sm font-medium text-zinc-100">{title}</span>
@@ -94,8 +119,8 @@ export function RadioCard({
 export function Badge({ tone, children }: { tone: 'ok' | 'accent' | 'muted'; children: ReactNode }) {
   const tones = {
     ok: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
-    accent: 'border-sky-500/40 bg-sky-500/10 text-sky-300',
-    muted: 'border-zinc-700 bg-zinc-800/60 text-zinc-300',
+    accent: 'badge-orb',
+    muted: 'border-white/10 bg-white/5 text-zinc-300',
   } as const;
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${tones[tone]}`}>
@@ -105,8 +130,9 @@ export function Badge({ tone, children }: { tone: 'ok' | 'accent' | 'muted'; chi
 }
 
 export function Kbd({ children }: { children: ReactNode }) {
+  // Brief §"KBD chips": rounded-md border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px].
   return (
-    <kbd className="rounded-md border border-zinc-700 bg-zinc-800/80 px-2 py-1 font-mono text-xs text-zinc-200 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
+    <kbd className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-zinc-300">
       {children}
     </kbd>
   );
@@ -126,16 +152,16 @@ export function Btn({
   type?: 'button' | 'submit';
 }) {
   const styles = {
-    primary: 'bg-sky-600 text-white hover:bg-sky-500 disabled:bg-zinc-800 disabled:text-zinc-500',
-    ghost: 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700 disabled:text-zinc-600',
-    danger: 'bg-red-950/60 text-red-300 hover:bg-red-900/60',
+    primary: 'btn-orb',
+    ghost: 'border border-white/10 bg-white/5 text-zinc-200 hover:border-white/20 hover:bg-white/10',
+    danger: 'border border-red-500/30 bg-red-950/50 text-red-300 hover:bg-red-900/60',
   } as const;
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${styles[variant]}`}
+      className={`focus-orb rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${styles[variant]}`}
     >
       {children}
     </button>
@@ -143,11 +169,19 @@ export function Btn({
 }
 
 export const inputCls =
-  'w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-sky-500/70 focus:outline-none';
+  'input-glass w-full rounded-lg px-3 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600';
 
 // ---- icons: minimal 16px stroke glyphs (no icon dependency) ----
 
 const ICON_PATHS: Record<string, ReactNode> = {
+  home: <path d="M2.5 7 8 2.2 13.5 7v6.3H9.8V9.8H6.2v3.5H2.5V7Z" />,
+  mic: (
+    <>
+      <rect x="6" y="1.8" width="4" height="7.2" rx="2" />
+      <path d="M3.8 7.2a4.2 4.2 0 0 0 8.4 0M8 11.4v2.4M5.8 13.8h4.4" />
+    </>
+  ),
+  code: <path d="m5.5 5-3 3 3 3M10.5 5l3 3-3 3" />,
   persona: <circle cx="8" cy="8" r="5.5" />,
   permissions: (
     <path d="M8 1.8 2.8 3.6v4.1c0 3.2 2.2 5.3 5.2 6.5 3-1.2 5.2-3.3 5.2-6.5V3.6L8 1.8Z" />
