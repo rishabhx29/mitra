@@ -16,12 +16,11 @@ import { PersonaStage } from '../persona/PersonaStage';
 import type { VrmLicenseInfo } from '../persona/avatar/licenseMeta';
 import { baseName, isValidVrmFileName, readVrmLicense } from './vrmMeta';
 import { getMitra } from './mitraClient';
+import { SAMPLE_AVATARS } from '../shared/ipc';
 import { Badge, Btn, Card, RadioCard, Tt } from './ui';
 import type { SaveFn } from './types';
 
 const SAVE_DEBOUNCE_MS = 250;
-/** Display name for the bundled sample (bytes come from main; only the path does not). */
-const SAMPLE_FILE_NAME = 'Seed-san.vrm';
 
 export default function PersonaPicker({
   settings,
@@ -281,17 +280,17 @@ function AvatarSection({
       });
   };
 
-  const useSample = () => {
+  const useSample = (sample: (typeof SAMPLE_AVATARS)[number]) => {
     const mitra = getMitra();
     if (!mitra || busy) return;
     setErrorKey(null);
     setBusy(true);
     void mitra
-      .setAvatarFile({ kind: 'sample' })
+      .setAvatarFile({ kind: 'sample', name: sample.file })
       .then((res) => {
         setBusy(false);
         if (res.ok) {
-          applyPreview(res.bytes, SAMPLE_FILE_NAME, res.path);
+          applyPreview(res.bytes, sample.file, res.path);
           save({ avatarVrmPath: res.path });
         } else {
           setErrorKey(res.error === 'source-missing' ? 'settings.persona.vrmSampleMissing' : 'settings.persona.vrmCopyFailed');
@@ -360,9 +359,21 @@ function AvatarSection({
                 <Btn variant="primary" disabled={busy} onClick={() => inputRef.current?.click()}>
                   <span data-testid="avatar-browse">{tt('settings.persona.vrmBrowse')}</span>
                 </Btn>
-                <Btn variant="ghost" disabled={busy} onClick={useSample}>
-                  <span data-testid="avatar-sample">{tt('settings.persona.vrmUseSample')}</span>
-                </Btn>
+              </div>
+              {/* Bundled samples: one-click chips (provenance in assets/avatars/ATTRIBUTION.md) */}
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5" data-testid="avatar-samples">
+                {SAMPLE_AVATARS.map((s) => (
+                  <button
+                    key={s.file}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => useSample(s)}
+                    data-testid={`avatar-sample-${s.file}`}
+                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-zinc-300 transition hover:border-white/25 hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -395,6 +406,20 @@ function AvatarSection({
               <span data-testid="avatar-status" className="truncate text-xs text-zinc-400">
                 {tt('settings.persona.vrmLoaded')}: {fileName}
               </span>
+              <button
+                data-testid="avatar-browse-loaded"
+                onClick={() => inputRef.current?.click()}
+                className="focus-orb rounded text-xs text-zinc-500 underline hover:text-zinc-300"
+              >
+                {tt('settings.persona.vrmBrowse')}
+              </button>
+              <button
+                data-testid="avatar-fullscreen"
+                onClick={() => window.mitra?.toggleAvatarFullscreen()}
+                className="focus-orb rounded text-xs text-zinc-500 underline hover:text-zinc-300"
+              >
+                {tt('settings.persona.vrmFullscreen')}
+              </button>
               <button onClick={unload} className="focus-orb rounded text-xs text-zinc-500 underline hover:text-zinc-300">
                 {tt('settings.persona.vrmUnload')}
               </button>

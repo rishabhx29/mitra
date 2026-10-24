@@ -4,7 +4,7 @@
 // Channel names come from the frozen shared/ipc.ts contract.
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { IPC } from '../src/shared/ipc';
+import { IPC, SAMPLE_AVATARS } from '../src/shared/ipc';
 import type { SessionEvent, SetAvatarFilePayload, SetAvatarFileResult } from '../src/shared/ipc';
 import type { Settings, TranscriptEntry } from '../src/shared/types';
 import { sanitizeSettings, type SettingsStore } from './store';
@@ -35,17 +35,23 @@ export const defaultAvatarFs: AvatarFs = {
 };
 
 /**
- * Bundled sample VRM (Seed-san — VRM Consortium spec sample, attribution shown
- * in-app from the model's own meta). Resolved per run layout:
+ * Bundled sample VRMs (assets/avatars/, provenance + licensing in
+ * app/assets/avatars/ATTRIBUTION.md; each model's embedded meta is shown in-app
+ * on load). Resolved per run layout:
  *   - dev (electron-vite builds main to out/main): out/main → ../../assets → <app>/assets
  *   - packaged: app.asar/out/main → ../assets → app.asar/assets (electron-builder packs assets/)
  *   - vitest/source: electron/ → ../assets → <app>/assets
+ * `name` must be a file from the SAMPLE_AVATARS allowlist (blocks path traversal).
  * Returns the first candidate that exists, or null — never throws.
  */
-export function resolveBundledSampleVrmPath(fs: Pick<AvatarFs, 'existsSync'> = defaultAvatarFs): string | null {
+export function resolveBundledSampleVrmPath(
+  fs: Pick<AvatarFs, 'existsSync'> = defaultAvatarFs,
+  name: string = SAMPLE_AVATARS[0].file,
+): string | null {
+  if (!SAMPLE_AVATARS.some((s) => s.file === name)) return null;
   const candidates = [
-    join(__dirname, '../../assets/avatars/Seed-san.vrm'),
-    join(__dirname, '../assets/avatars/Seed-san.vrm'),
+    join(__dirname, `../../assets/avatars/${name}`),
+    join(__dirname, `../assets/avatars/${name}`),
   ];
   for (const candidate of candidates) {
     try {
@@ -69,12 +75,14 @@ export interface RegisterIpcDeps {
    * log. Injected so vitest can observe the dispatch without electron.
    */
   onSessionEvent?: (event: SessionEvent) => void;
+  /** Toggles the fullscreen avatar viewer window (main creates/closes the singleton). */
+  onToggleAvatarFullscreen?: () => void;
   /** userData dir for the avatar copy target (main passes app.getPath('userData')). */
   userDataDir?: string;
   /** fs subset for the avatar copy; defaults to real node fs. */
   avatarFs?: AvatarFs;
-  /** Resolves the bundled sample .vrm; defaults to resolveBundledSampleVrmPath(). */
-  resolveSampleVrmPath?: () => string | null;
+  /** Resolves a bundled sample .vrm by allowlisted name; defaults to resolveBundledSampleVrmPath(). */
+  resolveSampleVrmPath?: (sampleName?: string) => string | null;
 }
 
 export function registerIpcHandlers(deps: RegisterIpcDeps): void {
@@ -100,6 +108,9 @@ export function registerIpcHandlers(deps: RegisterIpcDeps): void {
   ipcMain.handle(IPC.setAvatarFile, (_event, payload: unknown): SetAvatarFileResult =>
     setAvatarFile(payload, deps),
   );
+
+  // Fullscreen avatar viewer: main owns the singleton window lifecycle.
+  ipcMain.on(IPC.toggleAvatarFullscreen, () => deps.onToggleAvatarFullscreen?.());
 
   // Full-transcript pipe (UI-polish wave): the overlay circle shows only the newest
   // agent/system reply, so the overlay reports every provider transcript entry here
@@ -130,7 +141,10 @@ export function parseTranscriptEntry(entry: unknown): TranscriptEntry | null {
 function parseAvatarPayload(payload: unknown): SetAvatarFilePayload | null {
   if (payload === null || typeof payload !== 'object') return null;
   const p = payload as Record<string, unknown>;
-  if (p['kind'] === 'sample') return { kind: 'sample' };
+  if (p['kind'] === 'sample') {
+    // Optional sample name; anything non-string degrades to the default sample.
+    return { kind: 'sample', name: typeof p['name'] === 'string' ? p['name'] : undefined };
+  }
   if (p['kind'] === 'pick' && typeof p['sourcePath'] === 'string' && p['sourcePath'].length > 0) {
     return { kind: 'pick', sourcePath: p['sourcePath'] };
   }
@@ -148,12 +162,12 @@ export function setAvatarFile(
   deps: Pick<RegisterIpcDeps, 'store' | 'onSettingsChanged' | 'userDataDir' | 'avatarFs' | 'resolveSampleVrmPath'>,
 ): SetAvatarFileResult {
   const fs = deps.avatarFs ?? defaultAvatarFs;
-  const resolveSample = deps.resolveSampleVrmPath ?? (() => resolveBundledSampleVrmPath(fs));
+  const resolveSample = deps.resolveSampleVrmPath ?? ((sampleName?: string) => resolveBundledSampleVrmPath(fs, sampleName));
 
   // Garbage payload, or the sample resolver came up empty → no usable source.
   const parsed = parseAvatarPayload(payload);
   const source: string | null =
-    parsed === null ? null : parsed.kind === 'sample' ? resolveSample() : parsed.sourcePath;
+    parsed === null ? null : parsed.kind === 'sample' ? resolveSample(parsed.name) : parsed.sourcePath;
   if (typeof source !== 'string') return { ok: false, error: 'source-missing' };
 
   // Main-side extension gate (the renderer validates too; this keeps main honest).

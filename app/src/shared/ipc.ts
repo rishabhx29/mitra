@@ -12,6 +12,7 @@ export const IPC = {
   setSettings: 'mitra:set-settings',
   hideOverlay: 'mitra:hide-overlay',
   setAvatarFile: 'mitra:set-avatar-file',
+  toggleAvatarFullscreen: 'mitra:toggle-avatar-fullscreen',
 } as const;
 
 export type SessionEvent =
@@ -19,8 +20,20 @@ export type SessionEvent =
   | { kind: 'transcript'; entry: TranscriptEntry }
   | { kind: 'tool-result'; result: { ok: boolean; summary: string } };
 
-/** Payload for mitra:set-avatar-file: copy the bundled sample, or a user-picked .vrm. */
-export type SetAvatarFilePayload = { kind: 'sample' } | { kind: 'pick'; sourcePath: string };
+/** Payload for mitra:set-avatar-file: copy a bundled sample (by name), or a user-picked .vrm. */
+export type SetAvatarFilePayload = { kind: 'sample'; name?: string } | { kind: 'pick'; sourcePath: string };
+
+/**
+ * Bundled sample avatars (packed under assets/avatars/, shown as one-click chips).
+ * Provenance + licensing in app/assets/avatars/ATTRIBUTION.md; each model's own
+ * embedded license meta is displayed in-app when it loads.
+ */
+export const SAMPLE_AVATARS = [
+  { file: 'Seed-san.vrm', label: 'Seed-san' },
+  { file: 'Twintail_Sample.vrm', label: 'Twintail' },
+  { file: 'AvatarSample_B.vrm', label: 'Avatar B' },
+  { file: 'AvatarSample_D.vrm', label: 'Avatar D' },
+] as const;
 
 /** Stable error codes — the renderer maps them to i18n strings (main stays locale-free). */
 export type SetAvatarFileError = 'invalid-extension' | 'source-missing' | 'copy-failed';
@@ -53,6 +66,8 @@ export interface MitraApi {
   onOverlayShown(cb: () => void): () => void;
   /** Fired when the overlay is hidden (hotkey/Escape/app switch) — stop the session. */
   onOverlayHidden(cb: () => void): () => void;
+  /** Open/close the fullscreen avatar viewer window (singleton; Esc also closes it). */
+  toggleAvatarFullscreen(): void;
   /**
    * Copy a .vrm (picked file or bundled sample) into userData/avatars/current.vrm
    * (atomic write, mkdir -p), persist Settings.avatarVrmPath, and return the
