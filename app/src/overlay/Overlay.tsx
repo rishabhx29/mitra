@@ -16,9 +16,29 @@ export function isDevMode(): boolean {
   }
 }
 
+/**
+ * Kill the scrollbar permanently (docs/DESIGN_BRIEF.md §Overlay): the overlay
+ * is a 220×220 transparent window and nothing in it may ever scroll. Enforced
+ * on <html>/<body> for THIS document only — the settings window keeps its own
+ * scrolling (shared index.css must stay generic). Idempotent; the overlay page
+ * lives for the whole window lifetime so no restore-on-unmount is needed.
+ */
+export function enforceNoScroll(): void {
+  try {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+  } catch {
+    /* never throw in a degraded environment */
+  }
+}
+
 export default function Overlay() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    enforceNoScroll();
+  }, []);
 
   useEffect(() => {
     let alive = true;

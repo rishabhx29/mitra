@@ -22,6 +22,7 @@ import { useAudioAnalyser } from '../persona/orb/useAudioAnalyser';
 import { BolnaProvider, MockProvider, createVoiceProvider } from '../voice';
 import { t } from '../i18n';
 import { Captions } from './Captions';
+import { decideInactivity } from './timeout';
 
 /** Subtle state ring: border + glow color per SessionState. */
 const STATE_RING: Record<SessionState, { border: string; glow: string }> = {
@@ -57,6 +58,14 @@ export function SessionController({ settings, devMode = false }: SessionControll
   const mockAmpBox = useRef<{ current: number } | null>(null);
   const bolnaAmpBox = useRef<{ current: number } | null>(null);
 
+  // Inactivity clock (docs/DESIGN_BRIEF.md §Overlay): when the current state
+  // began. Re-armed on every state change and on every user transcript, so
+  // decideInactivity() sees "ms since the session entered listening (or since
+  // the user last spoke)" / "ms since thinking began".
+  const stateRef = useRef<SessionState>('idle');
+  stateRef.current = state;
+  const stateSinceRef = useRef(Date.now());
+
   // ONE analyser for the whole overlay (orb + avatar both read its ref).
   const analyserRef = useAudioAnalyser(audioElRef);
   const driveRef = useRef(0);
@@ -80,7 +89,14 @@ export function SessionController({ settings, devMode = false }: SessionControll
       if (provider instanceof MockProvider) mockAmpBox.current = provider.syntheticAmplitude;
       else if (provider instanceof BolnaProvider) bolnaAmpBox.current = provider.agentAmplitude;
       provider.onState(setState);
-      provider.onTranscript((entry) => setEntries((prev) => [...prev.slice(-MAX_ENTRIES + 1), entry]));
+      provider.onTranscript((entry) => {
+        if (entry.role === 'user') stateSinceRef.current = Date.now(); // speech re-arms the no-speech window
+        setEntries((prev) => [...prev.slice(-MAX_ENTRIES + 1), entry]);
+        // Full-transcript pipe (UI-polish wave): the circle shows only the newest
+        // agent/system reply, so every provider entry is reported to main for the
+        // settings window's Conversation log (mitra:report-transcript).
+        window.mitra?.reportTranscript(entry);
+      });
       if (audioElRef.current) provider.attachAudio(audioElRef.current);
       // With the shell present, the session lifecycle is summon-driven: the overlay
       // window is created hidden at boot, and overlay-shown/hidden IPC (hotkey) is
@@ -140,6 +156,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
       if (ev.kind === 'state') {
         setState(ev.state);
       } else if (ev.kind === 'transcript') {
+        if (ev.entry.role === 'user') stateSinceRef.current = Date.now();
         setEntries((prev) => [...prev.slice(-MAX_ENTRIES + 1), ev.entry]);
       } else {
         setEntries((prev) => [
@@ -159,6 +176,58 @@ export function SessionController({ settings, devMode = false }: SessionControll
       const timer = setTimeout(dismiss, 900);
       return () => clearTimeout(timer);
     }
+  }, [state, dismiss]);
+
+  // ---- inactivity timeouts (docs/DESIGN_BRIEF.md §Overlay) ----
+  // Pure policy lives in timeout.ts (unit-tested); this effect only wires the
+  // wall clock: every 500ms ask "how long have we been in this state?" and act
+  // on the decision. Each state change re-arms the clock; user speech re-arms
+  // it too (see the transcript handlers above).
+  useEffect(() => {
+    if (state === 'idle' || state === 'error') return; // nothing can hang there
+    stateSinceRef.current = Date.now();
+    const interval = setInterval(() => {
+      const action = decideInactivity(stateRef.current, Date.now() - stateSinceRef.current);
+      if (action === 'none') return;
+      const p = providerRef.current;
+      if (!p) {
+        clearInterval(interval); // no live session to stop — don't note-spam
+        return;
+      }
+      if (action === 'no-speech') {
+        // System note → stop → the provider drops to idle → the existing
+        // idle→hide path above dismisses the overlay.
+        setEntries((prev) => [
+          ...prev.slice(-MAX_ENTRIES + 1),
+          { role: 'system', text: t(languageRef.current, 'overlay.noSpeech'), ts: Date.now() },
+        ]);
+        void p.stop();
+      } else {
+        // thinking hung: error note + red state now, stop shortly after — but
+        // only if we are still in that error episode (the user may have
+        // dismissed and re-summoned inside the delay).
+        setEntries((prev) => [
+          ...prev.slice(-MAX_ENTRIES + 1),
+          {
+            role: 'system',
+            text: t(languageRef.current, 'overlay.thinkingTimeout'),
+            ts: Date.now(),
+          },
+        ]);
+        setState('error');
+        setTimeout(() => {
+          if (stateRef.current !== 'error') return;
+          void p.stop();
+          // Dismissal normally rides the provider's idle→hide path; guarantee
+          // it even if the provider never reports idle (hung Bolna session).
+          setTimeout(() => {
+            if (stateRef.current !== 'idle') dismiss();
+          }, 400);
+        }, 1200);
+      }
+      clearInterval(interval); // fire at most once per state episode
+    }, 500);
+    return () => clearInterval(interval);
   }, [state, dismiss]);
 
   // ---- Escape dismisses (main also has a before-input-event safety net) ----
@@ -197,7 +266,11 @@ export function SessionController({ settings, devMode = false }: SessionControll
   const ring = STATE_RING[state];
 
   return (
-    <div className="h-full w-full bg-transparent" onClick={dismiss} data-testid="mitra-overlay-root">
+    <div
+      className="h-full w-full overflow-hidden bg-transparent"
+      onClick={dismiss}
+      data-testid="mitra-overlay-root"
+    >
       <div
         className="relative m-[6px] h-[calc(100%-12px)] w-[calc(100%-12px)] overflow-hidden rounded-full border-2"
         style={{
