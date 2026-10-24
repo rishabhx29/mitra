@@ -1,0 +1,192 @@
+// Settings window shell (Task E): loads settings over the mitra IPC bridge,
+// hosts the seven panels, and shows a status.saved toast after each successful
+// save. Outside Electron (plain-browser dev) it degrades to an in-memory
+// fallback so the UI still works — flagged with a local-only hint.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
+import { DEFAULT_SETTINGS, type Settings } from '../shared/types';
+import { resolveMitraApi } from './mitraClient';
+import PersonaPicker from './PersonaPicker';
+import PermissionsPanel from './PermissionsPanel';
+import AppsPanel from './AppsPanel';
+import NotionPanel from './NotionPanel';
+import HotkeyPanel from './HotkeyPanel';
+import LanguagePanel from './LanguagePanel';
+import TranscriptLog from './TranscriptLog';
+import { Icon } from './ui';
+import type { SectionId, SaveFn } from './types';
+
+const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }> = [
+  { id: 'persona', labelKey: 'settings.persona', icon: 'persona' },
+  { id: 'permissions', labelKey: 'settings.permissions', icon: 'permissions' },
+  { id: 'apps', labelKey: 'settings.apps', icon: 'apps' },
+  { id: 'notion', labelKey: 'settings.notion', icon: 'notion' },
+  { id: 'hotkey', labelKey: 'settings.hotkey', icon: 'hotkey' },
+  { id: 'language', labelKey: 'settings.language', icon: 'language' },
+  { id: 'transcript', labelKey: 'settings.transcript', icon: 'transcript' },
+];
+
+const TOAST_MS = 1800;
+
+export default function SettingsApp() {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [persisted, setPersisted] = useState(true);
+  const [section, setSection] = useState<SectionId>('persona');
+  const [toast, setToast] = useState<{ tone: 'ok' | 'err'; key: string } | null>(null);
+  const apiRef = useRef<{ api: ReturnType<typeof resolveMitraApi>['api'] } | null>(null);
+  const toastTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    const resolved = resolveMitraApi();
+    apiRef.current = { api: resolved.api };
+    setPersisted(resolved.persisted);
+    resolved.api
+      .getSettings()
+      .then(setSettings)
+      .catch(() => {
+        // Never block the window on a broken store — defaults + honest hint.
+        setSettings({ ...DEFAULT_SETTINGS });
+        setPersisted(false);
+      });
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  const showToast = useCallback((tone: 'ok' | 'err', key: string) => {
+    setToast({ tone, key });
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+
+  const lang = settings?.language ?? 'en';
+  const tt = useCallback((key: string) => t(lang, key), [lang]);
+
+  const save: SaveFn = useCallback(
+    (patch) => {
+      const api = apiRef.current?.api;
+      if (!api) return;
+      api
+        .setSettings(patch)
+        .then((next) => {
+          setSettings(next);
+          showToast('ok', 'status.saved');
+        })
+        .catch(() => showToast('err', 'status.saveFailed'));
+    },
+    [showToast],
+  );
+
+  if (settings === null) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+        …
+      </div>
+    );
+  }
+
+  const panelProps = { settings, tt, save };
+
+  return (
+    <div className="flex h-full w-full bg-zinc-950 text-zinc-100">
+      {/* Sidebar */}
+      <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-800/80 bg-zinc-900/30">
+        <div className="flex items-center gap-3 px-5 py-5">
+          <span
+            className="h-7 w-7 rounded-full"
+            style={{
+              background: `radial-gradient(circle at 32% 28%, ${settings.orbColors.a}, ${settings.orbColors.b} 75%)`,
+              boxShadow: `0 0 14px ${settings.orbColors.b}80`,
+            }}
+          />
+          <div>
+            <div className="text-sm font-semibold">{tt('app.title')}</div>
+            <div className="text-[11px] text-zinc-500">{tt('settings.title')}</div>
+          </div>
+        </div>
+        <nav className="flex-1 space-y-1 px-3" aria-label={tt('settings.title')}>
+          {SECTIONS.map(({ id, labelKey, icon }) => {
+            const active = section === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setSection(id)}
+                aria-current={active ? 'page' : undefined}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+                  active ? 'bg-white/5 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'
+                }`}
+              >
+                <span className={active ? 'text-sky-400' : 'text-zinc-500'}>
+                  <Icon name={icon} />
+                </span>
+                {tt(labelKey)}
+                {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sky-400" />}
+              </button>
+            );
+          })}
+        </nav>
+        {!persisted && (
+          <p className="mx-3 mb-3 rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-[11px] leading-snug text-amber-300">
+            {tt('settings.localOnly')}
+          </p>
+        )}
+      </aside>
+
+      {/* Content */}
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-2xl px-8 py-8">
+          <h2 className="mb-6 text-lg font-semibold">{tt(SECTIONS.find((s) => s.id === section)?.labelKey ?? 'settings.title')}</h2>
+
+          <div className={section === 'persona' ? '' : 'hidden'}>
+            {section === 'persona' && <PersonaPicker {...panelProps} />}
+          </div>
+          <div className={section === 'permissions' ? '' : 'hidden'}>
+            {section === 'permissions' && <PermissionsPanel {...panelProps} />}
+          </div>
+          <div className={section === 'apps' ? '' : 'hidden'}>
+            {section === 'apps' && <AppsPanel {...panelProps} />}
+          </div>
+          <div className={section === 'notion' ? '' : 'hidden'}>
+            {section === 'notion' && <NotionPanel {...panelProps} />}
+          </div>
+          <div className={section === 'hotkey' ? '' : 'hidden'}>
+            {section === 'hotkey' && <HotkeyPanel {...panelProps} />}
+          </div>
+          <div className={section === 'language' ? '' : 'hidden'}>
+            {section === 'language' && <LanguagePanel {...panelProps} />}
+          </div>
+          {/* TranscriptLog stays mounted (subscription lives) and toggles visibility. */}
+          <div className={section === 'transcript' ? '' : 'hidden'}>
+            <TranscriptLog tt={tt} visible={section === 'transcript'} />
+          </div>
+        </div>
+      </main>
+
+      {/* Saved toast */}
+      {toast && (
+        <div
+          role="status"
+          className={`fixed bottom-6 right-6 flex items-center gap-2 rounded-lg border px-4 py-2 text-sm shadow-lg backdrop-blur ${
+            toast.tone === 'ok'
+              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+              : 'border-red-500/40 bg-red-500/15 text-red-200'
+          }`}
+        >
+          {toast.tone === 'ok' ? (
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m3 8.5 3.5 3.5L13 4.5" />
+            </svg>
+          ) : (
+            '!'
+          )}
+          {tt(toast.key)}
+        </div>
+      )}
+    </div>
+  );
+}

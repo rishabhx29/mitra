@@ -24,3 +24,7 @@ Thumbs.db
 
 # electron-vite output
 app/out/
+
+# playwright artifacts (e2e)
+app/test-results/
+app/playwright-report/

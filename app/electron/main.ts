@@ -39,10 +39,17 @@ function loadRenderer(
   which: 'overlay' | 'settings',
 ): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
+  // E2E affordance (Task F): with MITRA_E2E=1 the overlay page is loaded with
+  // ?dev=1 so the Playwright smoke can drive the mock brain through the dev text
+  // input (src/overlay/SessionController.tsx, [data-testid="mitra-dev-input"]) —
+  // no microphone exists in automated tests. Inert in normal runs.
+  const e2eDevInput = which === 'overlay' && process.env['MITRA_E2E'] === '1';
   if (!app.isPackaged && devUrl) {
-    void win.loadURL(`${devUrl}?window=${which}`);
+    void win.loadURL(e2eDevInput ? `${devUrl}?window=${which}&dev=1` : `${devUrl}?window=${which}`);
   } else {
-    void win.loadFile(RENDERER_FILE, { query: { window: which } });
+    void win.loadFile(RENDERER_FILE, {
+      query: e2eDevInput ? { window: which, dev: '1' } : { window: which },
+    });
   }
 }
 
@@ -129,6 +136,16 @@ function bootstrap(): void {
     // Mock-mode-first: the app stays fully usable without the bridge.
     console.warn('[mitra:bridge] failed to start:', err);
   });
+
+  // ---- e2e hooks (Task F) — inert unless MITRA_E2E=1 ----
+  // Playwright cannot press OS-level global shortcuts or click the tray, so the
+  // smoke test (app/e2e/smoke.spec.ts) re-triggers the exact same closures the
+  // hotkey and tray use by emitting these channels in the main process:
+  //   electronApp.evaluate(({ ipcMain }, ch) => { ipcMain.emit(ch); }, 'mitra:e2e-…')
+  if (process.env['MITRA_E2E'] === '1') {
+    ipcMain.on('mitra:e2e-toggle-overlay', () => toggleOverlay());
+    ipcMain.on('mitra:e2e-show-settings', () => showSettings());
+  }
 }
 
 function showSettings(): void {

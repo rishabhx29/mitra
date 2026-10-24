@@ -9,7 +9,7 @@ import process from 'node:process';
 import { DEFAULT_SETTINGS, type Settings, type ToolName, type ToolRequest, type ToolResult } from '../shared/types';
 import { checkPermission } from './acl';
 import { isKnownTool, createToolDispatcher } from './tools/index';
-import type { MockNotion } from './mockNotion';
+import { createMemoryMockNotion, type MockNotion } from './mockNotion';
 import type { FetchLike } from './tools/notion';
 
 export const DEFAULT_BRIDGE_HOST = '127.0.0.1';
@@ -61,16 +61,36 @@ export function createBridgeApp(deps: BridgeDeps): Express {
   const app = express();
   app.use(express.json());
 
+  // CORS for the renderer: the settings/overlay pages run on file:// (prod) or a
+  // dev-server origin, both cross-origin to http://127.0.0.1:8765, so Chromium
+  // blocks every response without this header — and the JSON POSTs need an
+  // OPTIONS preflight. The bridge binds loopback only, carries no credentials,
+  // and mutations stay ACL-gated, so a permissive origin header is safe here.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   const settings = deps.settings ?? (() => DEFAULT_SETTINGS);
   const env = deps.env ?? process.env;
   const fetchImpl: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  // Shared board (Task E: GET /api/notion/items reads the same store the notion tool
+  // writes). In-memory fallback when the host passes no board — hoisted so items
+  // persist across requests within this process instead of resetting per dispatch.
+  const mockNotion: MockNotion = deps.mockNotion ?? createMemoryMockNotion();
   const executeTool =
     deps.executeTool ??
     createToolDispatcher({
       settings,
       fetchImpl: deps.fetchImpl,
       env,
-      mockNotion: deps.mockNotion,
+      mockNotion,
       cwd: deps.cwd,
       onProgress: deps.onProgress,
     });
@@ -80,10 +100,36 @@ export function createBridgeApp(deps: BridgeDeps): Express {
     res.json({ ok: true, service: 'mitra-bridge', mock: bolnaKeys(env) === null });
   });
 
+  // Task E (Settings UI): the mock to-do board read endpoint — returns the same
+  // persisted items notion_add_todo writes. Never throws (mock-mode rule).
+  app.get('/api/notion/items', async (_req: Request, res: Response) => {
+    try {
+      const items = await mockNotion.list();
+      res.json({ ok: true, items });
+    } catch (err) {
+      res
+        .status(200)
+        .json({ ok: false, summary: `Board read failed: ${err instanceof Error ? err.message : String(err)}`, items: [] });
+    }
+  });
+
   app.post('/api/session', async (req: Request, res: Response) => {
     try {
+      // Two caller shapes (Task D):
+      //   {language}          — our own callers (createVoiceProvider probe, etc.)
+      //   {user_data: {...}}  — the @bolna/web-call SDK shape (it POSTs this to
+      //                         sessionUrl when it mints itself). With the SDK
+      //                         shape the agent language comes from
+      //                         user_data.language via agent_data and user_data
+      //                         is forwarded verbatim.
       const body = (req.body ?? {}) as { language?: unknown; user_data?: Record<string, unknown> };
-      const language = body.language === 'hi' ? 'hi' : 'en';
+      const userData =
+        body.user_data !== null &&
+        typeof body.user_data === 'object' &&
+        !Array.isArray(body.user_data)
+          ? (body.user_data as Record<string, unknown>)
+          : undefined;
+      const language = (userData ? userData['language'] : body.language) === 'hi' ? 'hi' : 'en';
       const keys = bolnaKeys(env);
       if (!keys) {
         // Mock mode: zero keys must still yield a usable session — never throw (Review Focus #1).
@@ -91,11 +137,17 @@ export function createBridgeApp(deps: BridgeDeps): Express {
         return;
       }
       // Per-call language switch via agent_data.language (research/00 §product table).
-      const upstreamBody = {
-        agent_id: keys.agentId,
-        agent_data: { language },
-        user_data: { language, ...(body.user_data ?? {}) },
-      };
+      const upstreamBody = userData
+        ? {
+            agent_id: keys.agentId,
+            agent_data: { language },
+            user_data: { ...userData },
+          }
+        : {
+            agent_id: keys.agentId,
+            agent_data: { language },
+            user_data: { language, ...(body.user_data ?? {}) },
+          };
       try {
         const upstream = await fetchImpl(deps.bolnaSessionUrl ?? DEFAULT_BOLNA_SESSION_URL, {
           method: 'POST',

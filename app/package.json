@@ -3,6 +3,7 @@
   "productName": "Mitra",
   "version": "0.1.0",
   "description": "Mitra — cross-platform desktop voice AI assistant (Bolna Buildathon)",
+  "author": "Mitra Team",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

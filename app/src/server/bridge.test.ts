@@ -212,3 +212,154 @@ describe('POST /api/tools/:name', () => {
     expect(await res.json()).toEqual({ ok: false, summary: 'Invalid JSON body' });
   });
 });
+
+describe('GET /api/notion/items (Task E: settings board view)', () => {
+  it('returns the persisted mock items, sharing the board with notion_add_todo', async () => {
+    const board = createMemoryMockNotion();
+    const h = await start({ settings: () => DEFAULT_SETTINGS, env: {}, mockNotion: board });
+    await fetch(`http://127.0.0.1:${h.port}/api/tools/notion_add_todo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 't9', args: { text: 'milk' } }),
+    });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/notion/items`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; items: Array<{ text: string; createdAt: string; id: string }> };
+    expect(body.ok).toBe(true);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.text).toBe('milk');
+    expect(body.items[0]?.id).toBeTruthy();
+    expect(typeof body.items[0]?.createdAt).toBe('string');
+  });
+
+  it('returns an empty list on a fresh board', async () => {
+    const h = await start({ settings: () => DEFAULT_SETTINGS, env: {} });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/notion/items`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, items: [] });
+  });
+
+  it('degrades to { ok:false, items:[] } when the board read fails — never 5xx', async () => {
+    const broken = {
+      list: async () => {
+        throw new Error('disk full');
+      },
+      add: async () => {
+        throw new Error('disk full');
+      },
+    };
+    const h = await start({ settings: () => DEFAULT_SETTINGS, env: {}, mockNotion: broken });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/notion/items`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; summary: string; items: unknown[] };
+    expect(body.ok).toBe(false);
+    expect(body.summary).toContain('disk full');
+    expect(body.items).toEqual([]);
+  });
+});
+
+// Task D: the @bolna/web-call SDK mints its own sessions by POSTing
+// {"user_data": …} to sessionUrl — the session route must forward that shape
+// verbatim and derive agent_data.language from user_data.language.
+describe('POST /api/session — SDK-shaped body ({user_data})', () => {
+  const session = {
+    run_id: 'run-sdk',
+    agent_id: 'a',
+    sip_username: 'u',
+    sip_password: 'p',
+    sip_domain: 'd',
+    wss_url: 'wss://x',
+    sip_register: false,
+    expires_in: 120,
+    ice_servers: [],
+  };
+
+  function capturingFetch(): FetchLike {
+    const calls: Array<{ url: string; init?: { body?: string } }> = [];
+    const impl = Object.assign(
+      (async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+        calls.push({ url, init });
+        return { ok: true, status: 200, json: async () => session, text: async () => JSON.stringify(session) };
+      }) as FetchLike,
+      { calls },
+    );
+    return impl;
+  }
+
+  it('forwards user_data verbatim and passes user_data.language via agent_data', async () => {
+    const fetchImpl = capturingFetch();
+    const h = await start({
+      settings: () => DEFAULT_SETTINGS,
+      env: { BOLNA_API_KEY: 'bn-key', BOLNA_AGENT_ID: 'agent-42' },
+      fetchImpl,
+    });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_data: { language: 'hi', customer: 'mitra' } }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(session);
+    const call = (fetchImpl as unknown as { calls: Array<{ init?: { body?: string } }> }).calls[0]!;
+    const body = JSON.parse(call.init?.body ?? '{}') as {
+      agent_id: string;
+      agent_data: { language: string };
+      user_data: Record<string, unknown>;
+    };
+    expect(body.agent_id).toBe('agent-42');
+    expect(body.agent_data.language).toBe('hi');
+    expect(body.user_data).toEqual({ language: 'hi', customer: 'mitra' });
+  });
+
+  it('defaults agent_data.language to en when the SDK body has none', async () => {
+    const fetchImpl = capturingFetch();
+    const h = await start({
+      settings: () => DEFAULT_SETTINGS,
+      env: { BOLNA_API_KEY: 'bn-key', BOLNA_AGENT_ID: 'agent-42' },
+      fetchImpl,
+    });
+    await fetch(`http://127.0.0.1:${h.port}/api/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_data: {} }),
+    });
+    const call = (fetchImpl as unknown as { calls: Array<{ init?: { body?: string } }> }).calls[0]!;
+    const body = JSON.parse(call.init?.body ?? '{}') as { agent_data: { language: string }; user_data: Record<string, unknown> };
+    expect(body.agent_data.language).toBe('en');
+    expect(body.user_data).toEqual({});
+  });
+
+  it('still returns {mock:true} for the SDK shape when keys are absent', async () => {
+    const h = await start({ settings: () => DEFAULT_SETTINGS, env: {} });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_data: { language: 'hi' } }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ mock: true });
+  });
+});
+
+describe('CORS (renderer pages are cross-origin to the loopback bridge)', () => {
+  it('GET responses carry Access-Control-Allow-Origin:*', async () => {
+    const h = await start({ settings: () => DEFAULT_SETTINGS, env: {} });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/notion/items`);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('OPTIONS preflight → 204 with allow-origin/headers (JSON POSTs need it)', async () => {
+    const h = await start({ settings: () => DEFAULT_SETTINGS, env: {} });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/tools/notion_add_todo`, {
+      method: 'OPTIONS',
+      headers: {
+        'Origin': 'null',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-headers')).toContain('Content-Type');
+  });
+});
