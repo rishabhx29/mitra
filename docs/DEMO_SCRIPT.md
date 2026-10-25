@@ -6,6 +6,13 @@
 > utterances are pinned by unit tests (`src/voice/mockProvider.test.ts`) and the
 > Playwright smoke (`app/e2e/smoke.spec.ts`).
 
+## New since v0.1 (weave into the flow)
+
+- **Console** (the AGI centerpiece): open from Home → boot sequence → type "add chai to my todo list" → tool card appears; ask a general question → local-brain reply (Ollama if installed, honest mock otherwise). Persona lives large and animates while replying.
+- **Workspace modes**: "aaj coding ka man hai" / "gaming mode on karo" → preset launches (editable in Settings → Modes).
+- **Memory**: "remember that I prefer dark mode" → "what do you remember?" — Settings → Memory viewer.
+- **Reminders + status + lockdown**: "remind me in 2 minutes to stretch" / "status batao" / "lock my computer".
+
 ## Setup (before recording)
 
 - [ ] Run the packaged exe (`app/dist/Mitra-0.1.0-portable-x64.exe`) or `npm run dev`.

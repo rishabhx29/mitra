@@ -32,6 +32,13 @@ Utterances the mock brain understands (see `src/voice/mockProvider.ts`):
 | language switch | "speak hindi" · "अब हिंदी में बोलो" |
 | stop | "stop" · "band karo" · "बंद करो" |
 
+## Feature map (v0.2)
+
+- **Voice overlay**: Ctrl+Shift+Space → speak (en/hi/Hinglish) → permission-gated tools; status pill + inactivity timeouts.
+- **Console** (Settings → Home → Open Console): AGI-style chat with the live persona; typed commands run the same tools; general chat via the **local brain** — [Ollama](https://ollama.com) auto-detected (`ollama pull qwen2.5:3b` recommended, runs on 8GB RAM), deterministic mock fallback with zero setup.
+- **Workspace modes** (coding/gaming/study/chill, en+hi+Hinglish triggers, editable), **memory** (remember/recall), **reminders/timers**, **status briefing**, **workstation lockdown** — all ACL-gated; see Settings panels.
+- **Personas**: audio-reactive orb (custom colors) or VRM avatar — 4 bundled samples (see `assets/avatars/ATTRIBUTION.md`) + drag-drop your own; fullscreen orbit viewer.
+
 ## Commands
 
 | Command | What it does |
