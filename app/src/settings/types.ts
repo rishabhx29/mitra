@@ -10,7 +10,9 @@ export type SectionId =
   | 'persona'
   | 'permissions'
   | 'apps'
+  | 'modes'
   | 'notion'
+  | 'memory'
   | 'hotkey'
   | 'language'
   | 'transcript';

@@ -3,9 +3,16 @@
 // no jsdom, no WebGL, no electron. rAF is absent in node, so the synthetic
 // amplitude envelope stays flat (asserted below) and no timers hang.
 import { describe, expect, it } from 'vitest';
-import type { SessionState, TranscriptEntry } from '../shared/types';
+import type { SessionState, TranscriptEntry, WorkspaceMode } from '../shared/types';
 import { t } from '../i18n';
-import { MockProvider, failureReply, parseIntent, type MockProviderDeps } from './mockProvider';
+import {
+  MockProvider,
+  failureReply,
+  intentToTool,
+  matchWorkspaceMode,
+  parseIntent,
+  type MockProviderDeps,
+} from './mockProvider';
 
 // ---------------------------------------------------------------------------
 // parseIntent — en / hi (Devanagari) / Hinglish
@@ -136,6 +143,301 @@ describe('parseIntent — unknown input', () => {
     expect(parseIntent('')).toBeNull();
     expect(parseIntent('   ')).toBeNull();
     expect(parseIntent('open')).toBeNull(); // launch requires a target
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseIntent — Ultron-port intents (rows 1,2,4,5,6): workspace_mode,
+// set_reminder, lock_workstation, status_briefing, memory
+// ---------------------------------------------------------------------------
+
+/** Stand-in for Settings.workspaceModes (same shape as DEFAULT_SETTINGS). */
+const MODE_FIXTURE: WorkspaceMode[] = [
+  {
+    id: 'coding',
+    name: 'Coding',
+    aliases: ['coding', 'coding mode', 'dev mode', 'कोडिंग', "let's code"],
+    apps: ['terminal'],
+    urls: ['https://github.com'],
+  },
+  {
+    id: 'study',
+    name: 'Study',
+    aliases: ['study', 'study mode', 'पढ़ाई'],
+    apps: ['notepad'],
+    urls: [],
+  },
+  {
+    id: 'chill',
+    name: 'Chill',
+    aliases: ['chill', 'movie time', 'movie', 'मूवी'],
+    apps: [],
+    urls: ['https://www.youtube.com'],
+  },
+];
+
+describe('parseIntent — workspace_mode (alias match against current settings)', () => {
+  it('matches English, Hinglish and Devanagari aliases and resolves the mode name', () => {
+    expect(parseIntent('coding mode chalu karo', MODE_FIXTURE)).toEqual({
+      kind: 'workspace_mode',
+      mode: 'Coding',
+    });
+    expect(parseIntent('कोडिंग', MODE_FIXTURE)).toEqual({ kind: 'workspace_mode', mode: 'Coding' });
+    expect(parseIntent('padhai karni hai', [
+      { id: 'study', name: 'Study', aliases: ['padhai karni hai', 'पढ़ाई'], apps: [], urls: [] },
+    ])).toEqual({ kind: 'workspace_mode', mode: 'Study' });
+    expect(parseIntent('movie time', MODE_FIXTURE)).toEqual({
+      kind: 'workspace_mode',
+      mode: 'Chill',
+    });
+  });
+
+  it("normalizes apostrophes so \u2018let's code\u2019 and \u2018lets code\u2019 both hit", () => {
+    expect(parseIntent("let's code", MODE_FIXTURE)).toEqual({ kind: 'workspace_mode', mode: 'Coding' });
+    expect(parseIntent('lets code', MODE_FIXTURE)).toEqual({ kind: 'workspace_mode', mode: 'Coding' });
+  });
+
+  it('matches aliases as whole words only, in order (no substring/reorder hits)', () => {
+    const gameMode: WorkspaceMode[] = [
+      { id: 'game', name: 'Game', aliases: ['game'], apps: [], urls: [] },
+    ];
+    // "gaming" is a different word than the alias "game" → launch_app, not the mode
+    expect(parseIntent('gaming kholo', gameMode)).toEqual({ kind: 'launch_app', alias: 'gaming' });
+    // a multi-word alias must appear in order ("deep work", not "work deep")
+    const deepWork: WorkspaceMode[] = [
+      { id: 'deep', name: 'Deep Work', aliases: ['deep work'], apps: [], urls: [] },
+    ];
+    expect(parseIntent('deep work now', deepWork)).toEqual({
+      kind: 'workspace_mode',
+      mode: 'Deep Work',
+    });
+    expect(parseIntent('work deep now', deepWork)).toBeNull();
+  });
+
+  it('is off without modes and stays specific-tool-first otherwise', () => {
+    expect(parseIntent('coding mode chalu karo', [])).toBeNull();
+    // a reminder beats the alias ("study" inside the reminder text)
+    expect(parseIntent('remind me in 10 minutes to study', MODE_FIXTURE)).toEqual({
+      kind: 'set_reminder',
+      minutes: 10,
+      text: 'study',
+    });
+    // a URL beats a mode whose alias shares the token
+    expect(parseIntent('open movie.com', MODE_FIXTURE)).toEqual({
+      kind: 'open_url',
+      url: 'https://movie.com',
+    });
+    // add-todo beats the alias
+    expect(parseIntent('add coding to my list', MODE_FIXTURE)).toEqual({
+      kind: 'add_todo',
+      text: 'coding',
+    });
+  });
+});
+
+describe('matchWorkspaceMode — direct', () => {
+  it('returns the first settings mode whose alias appears as whole words', () => {
+    expect(matchWorkspaceMode('dev mode on karo', MODE_FIXTURE)?.id).toBe('coding');
+    expect(matchWorkspaceMode('चलो मूवी देखें', MODE_FIXTURE)?.id).toBe('chill');
+    expect(matchWorkspaceMode('nothing matches here', MODE_FIXTURE)).toBeNull();
+  });
+
+  it('prefers the earlier mode when two modes share an alias (settings order wins)', () => {
+    const both: WorkspaceMode[] = [
+      { id: 'a', name: 'A', aliases: ['focus'], apps: [], urls: [] },
+      { id: 'b', name: 'B', aliases: ['focus'], apps: [], urls: [] },
+    ];
+    expect(matchWorkspaceMode('focus mode', both)?.id).toBe('a');
+  });
+});
+
+describe('parseIntent — set_reminder (duration parsing)', () => {
+  it('parses the English "remind me in/after N minutes" family', () => {
+    expect(parseIntent('remind me in 10 minutes to drink water')).toEqual({
+      kind: 'set_reminder',
+      minutes: 10,
+      text: 'drink water',
+    });
+    expect(parseIntent('Remind me in 10 minutes.')).toEqual({
+      kind: 'set_reminder',
+      minutes: 10,
+      text: '',
+    });
+    expect(parseIntent('remind me after 2 minutes')).toEqual({
+      kind: 'set_reminder',
+      minutes: 2,
+      text: '',
+    });
+    expect(parseIntent('remind me in 2m')).toEqual({ kind: 'set_reminder', minutes: 2, text: '' });
+    expect(parseIntent('remind me in 1 minute to stretch')).toEqual({
+      kind: 'set_reminder',
+      minutes: 1,
+      text: 'stretch',
+    });
+  });
+
+  it('parses "N minute ka timer" with an optional message', () => {
+    expect(parseIntent('5 minute ka timer')).toEqual({ kind: 'set_reminder', minutes: 5, text: '' });
+    expect(parseIntent('10 minute ka timer for chai')).toEqual({
+      kind: 'set_reminder',
+      minutes: 10,
+      text: 'chai',
+    });
+  });
+
+  it('parses Devanagari digits and मिनट', () => {
+    expect(parseIntent('४ मिनट का टाइमर')).toEqual({ kind: 'set_reminder', minutes: 4, text: '' });
+    expect(parseIntent('५ मिनट का टाइमर कि दूध उबालना')).toEqual({
+      kind: 'set_reminder',
+      minutes: 5,
+      text: 'दूध उबालना',
+    });
+    expect(parseIntent('10 मिनट बाद पानी पीना याद दिलाओ')).toEqual({
+      kind: 'set_reminder',
+      minutes: 10,
+      text: 'पानी पीना',
+    });
+    expect(parseIntent('2 मिनट बाद')).toEqual({ kind: 'set_reminder', minutes: 2, text: '' });
+  });
+
+  it('rejects nonsense durations instead of scheduling them', () => {
+    expect(parseIntent('remind me in 0 minutes')).toBeNull();
+    expect(parseIntent('remind me in 5000 minutes')).toBeNull();
+    expect(parseIntent('remind me')).toBeNull();
+  });
+});
+
+describe('parseIntent — lock_workstation', () => {
+  it('parses en/hinglish lock phrases', () => {
+    expect(parseIntent('lock my computer')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('Lock My Screen')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('lock the pc')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('screen lock karo')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('computer lock')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('lockdown')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('lock')).toEqual({ kind: 'lock_workstation' });
+  });
+
+  it('parses Devanagari lock phrases', () => {
+    expect(parseIntent('स्क्रीन लॉक करो')).toEqual({ kind: 'lock_workstation' });
+    expect(parseIntent('कंप्यूटर लॉक')).toEqual({ kind: 'lock_workstation' });
+  });
+
+  it('does not fire on lookalikes', () => {
+    expect(parseIntent('unlock my computer')).toBeNull();
+    expect(parseIntent('block my screen')).toBeNull();
+  });
+});
+
+describe('parseIntent — status_briefing', () => {
+  it('parses status asks in en/hinglish', () => {
+    expect(parseIntent('status')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('Status batao')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('battery status')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('status?')).toEqual({ kind: 'status_briefing' });
+  });
+
+  it('parses how-are-you greetings in en/hinglish/devanagari', () => {
+    expect(parseIntent('how are you doing')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('how are you')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('kaise ho')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('kaise ho bhai')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('कैसे हो')).toEqual({ kind: 'status_briefing' });
+    expect(parseIntent('sab kaisa hai')).toEqual({ kind: 'status_briefing' });
+  });
+
+  it('does not fire on unrelated phrasing', () => {
+    expect(parseIntent('ye kaise ho gaya')).toBeNull();
+    // specific tools beat the status word
+    expect(parseIntent('add status to my list')).toEqual({ kind: 'add_todo', text: 'status' });
+    expect(parseIntent('remind me in 5 minutes for the status call')).toEqual({
+      kind: 'set_reminder',
+      minutes: 5,
+      text: 'the status call',
+    });
+  });
+});
+
+describe('parseIntent — memory (remember / recall)', () => {
+  it('parses "remember that …" and Hinglish/Devanagari store phrasing', () => {
+    expect(parseIntent('remember that I love chai')).toEqual({
+      kind: 'memory_remember',
+      text: 'i love chai', // captures are lowercased like every other intent
+    });
+    expect(parseIntent('remember buy milk tomorrow')).toEqual({
+      kind: 'memory_remember',
+      text: 'buy milk tomorrow',
+    });
+    expect(parseIntent('yaad rakho ki mujhe doodh lena hai')).toEqual({
+      kind: 'memory_remember',
+      text: 'mujhe doodh lena hai',
+    });
+    expect(parseIntent('याद रखो कि दवा लेनी है')).toEqual({
+      kind: 'memory_remember',
+      text: 'दवा लेनी है',
+    });
+  });
+
+  it('parses recall-all as an exact utterance', () => {
+    expect(parseIntent('what do you remember')).toEqual({ kind: 'memory_recall_all' });
+    expect(parseIntent('what all do you remember?')).toEqual({ kind: 'memory_recall_all' });
+    expect(parseIntent('kya yaad hai')).toEqual({ kind: 'memory_recall_all' });
+    expect(parseIntent('क्या याद है')).toEqual({ kind: 'memory_recall_all' });
+  });
+
+  it('parses recall-with-query in en/hinglish/devanagari', () => {
+    expect(parseIntent('what do you remember about rahul')).toEqual({
+      kind: 'memory_recall',
+      query: 'rahul',
+    });
+    expect(parseIntent('kya yaad hai chai ke baare me')).toEqual({
+      kind: 'memory_recall',
+      query: 'chai',
+    });
+    expect(parseIntent('chai ke baare me kya yaad hai')).toEqual({
+      kind: 'memory_recall',
+      query: 'chai',
+    });
+    expect(parseIntent('kya yaad hai chai')).toEqual({ kind: 'memory_recall', query: 'chai' });
+    expect(parseIntent('चाय के बारे में क्या याद है')).toEqual({
+      kind: 'memory_recall',
+      query: 'चाय',
+    });
+  });
+
+  it('needs content after the verb', () => {
+    expect(parseIntent('remember')).toBeNull();
+    expect(parseIntent('yaad rakho ki')).toBeNull();
+  });
+});
+
+describe('intentToTool — Ultron-port mappings', () => {
+  it('maps every new intent onto its bridge tool with the ledger args', () => {
+    expect(intentToTool({ kind: 'workspace_mode', mode: 'Coding' })).toEqual({
+      tool: 'workspace_mode',
+      args: { name: 'Coding' },
+    });
+    expect(intentToTool({ kind: 'set_reminder', minutes: 10, text: 'drink water' })).toEqual({
+      tool: 'set_reminder',
+      args: { minutes: 10, text: 'drink water' },
+    });
+    expect(intentToTool({ kind: 'lock_workstation' })).toEqual({
+      tool: 'lock_workstation',
+      args: {},
+    });
+    expect(intentToTool({ kind: 'status_briefing' })).toEqual({ tool: 'status_briefing', args: {} });
+    expect(intentToTool({ kind: 'memory_remember', text: 'I love chai' })).toEqual({
+      tool: 'memory',
+      args: { action: 'remember', text: 'I love chai' },
+    });
+    expect(intentToTool({ kind: 'memory_recall_all' })).toEqual({
+      tool: 'memory',
+      args: { action: 'list' },
+    });
+    expect(intentToTool({ kind: 'memory_recall', query: 'chai' })).toEqual({
+      tool: 'memory',
+      args: { action: 'recall', text: 'chai' },
+    });
   });
 });
 
@@ -313,5 +615,135 @@ describe('MockProvider flow', () => {
     await provider.stop();
     expect(states[states.length - 1]).toBe('idle');
     await pending;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MockProvider flow — Ultron-port tools (same bridge path as every other intent)
+// ---------------------------------------------------------------------------
+
+describe('MockProvider flow — Ultron-port tools', () => {
+  it('workspace_mode → POSTs the CURRENT mode name and speaks the tool summary', async () => {
+    const { provider, calls, transcripts } = makeProvider(
+      async () => jsonResponse({ id: 'test-id', ok: true, summary: 'Coding mode launched: terminal, github.com' }),
+      { getWorkspaceModes: () => MODE_FIXTURE },
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('coding mode chalu karo');
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/tools/workspace_mode');
+    expect(calls[0]?.init?.method).toBe('POST');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'workspace_mode',
+      args: { name: 'Coding' },
+    });
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe('Coding mode launched: terminal, github.com');
+  });
+
+  it('workspace_mode follows live panel edits (no provider rebuild needed)', async () => {
+    let modes: WorkspaceMode[] = [];
+    const { provider, calls } = makeProvider(
+      async () => jsonResponse({ id: 'x', ok: true, summary: 'launched' }),
+      { getWorkspaceModes: () => modes },
+    );
+    await provider.start({ language: 'en' });
+
+    await provider.submitText('movie time'); // no modes configured yet
+    expect(calls).toHaveLength(0);
+
+    modes = MODE_FIXTURE; // the Modes panel just saved
+    await provider.submitText('movie time');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/tools/workspace_mode');
+  });
+
+  it('memory remember/recall → POSTs the memory tool with row-5 action args', async () => {
+    const { provider, calls } = makeProvider(async () =>
+      jsonResponse({ id: 'test-id', ok: true, summary: 'Stored.' }),
+    );
+    await provider.start({ language: 'en' });
+
+    await provider.submitText('remember that I love chai');
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/tools/memory');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'memory',
+      args: { action: 'remember', text: 'i love chai' },
+    });
+
+    await provider.submitText('what do you remember about chai');
+    expect(JSON.parse(calls[1]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'memory',
+      args: { action: 'recall', text: 'chai' },
+    });
+
+    await provider.submitText('kya yaad hai');
+    expect(JSON.parse(calls[2]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'memory',
+      args: { action: 'list' },
+    });
+  });
+
+  it('reminder, lock and status hit their bridge tools with the ledger args', async () => {
+    const { provider, calls } = makeProvider(async () =>
+      jsonResponse({ id: 'test-id', ok: true, summary: 'done' }),
+    );
+    await provider.start({ language: 'en' });
+
+    await provider.submitText('remind me in 10 minutes to drink water');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'set_reminder',
+      args: { minutes: 10, text: 'drink water' },
+    });
+
+    await provider.submitText('5 minute ka timer');
+    expect(JSON.parse(calls[1]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'set_reminder',
+      args: { minutes: 5, text: '' },
+    });
+
+    await provider.submitText('lock my computer');
+    expect(JSON.parse(calls[2]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'lock_workstation',
+      args: {},
+    });
+
+    await provider.submitText('battery status');
+    expect(JSON.parse(calls[3]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'status_briefing',
+      args: {},
+    });
+  });
+
+  it('unknown tool (server half not landed yet) → apology + summary, never throws', async () => {
+    const { provider, transcripts } = makeProvider(async () =>
+      jsonResponse({ id: 'x', ok: false, summary: 'Unknown tool: lock_workstation' }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('lock my computer');
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe(
+      `${t('en', 'voice.apology')} Unknown tool: lock_workstation`,
+    );
+  });
+
+  it('workspace_mode permission denial → localized launcher-gate apology', async () => {
+    const { provider, transcripts } = makeProvider(
+      async () => jsonResponse({ id: 'x', ok: false, summary: 'Permission denied: launcher' }, 403),
+      { getWorkspaceModes: () => MODE_FIXTURE },
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('coding mode chalu karo');
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe(t('en', 'voice.denied.launcher'));
   });
 });

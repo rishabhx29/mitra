@@ -4,7 +4,7 @@
 // provider creation; runtime Bolna failures degrade to an error state, not a
 // silent mid-session brain swap. Every failure path degrades to mock, never
 // throws (plan Review Focus #1: missing keys / offline still fully works).
-import type { VoiceProvider } from '../shared/types';
+import type { VoiceProvider, WorkspaceMode } from '../shared/types';
 import type { Session as BolnaSession } from '@bolna/web-call';
 import { BolnaProvider } from './bolnaProvider';
 import { MockProvider } from './mockProvider';
@@ -17,6 +17,11 @@ export interface CreateVoiceProviderOptions {
   fetchImpl?: typeof fetch;
   /** Force the mock brain (tests / explicit offline dev). */
   forceMock?: boolean;
+  /**
+   * Live getter for Settings.workspaceModes (mock brain only): the workspace_mode
+   * intent matches whatever the panel currently holds, without a provider rebuild.
+   */
+  getWorkspaceModes?: () => WorkspaceMode[];
 }
 
 /** Structural check: the bridge forwards Bolna's mint JSON as-is when keys exist. */
@@ -30,7 +35,7 @@ function looksLikeRealSession(value: unknown): value is BolnaSession {
 export async function createVoiceProvider(opts: CreateVoiceProviderOptions): Promise<VoiceProvider> {
   const bridgeBase = opts.bridgeBase ?? DEFAULT_BRIDGE_BASE;
   const fetchImpl: typeof fetch = opts.fetchImpl ?? ((url, init) => fetch(url, init));
-  if (opts.forceMock) return new MockProvider({ bridgeBase, fetchImpl });
+  if (opts.forceMock) return new MockProvider({ bridgeBase, fetchImpl, getWorkspaceModes: opts.getWorkspaceModes });
 
   try {
     const res = await fetchImpl(`${bridgeBase}/api/session`, {
@@ -50,7 +55,7 @@ export async function createVoiceProvider(opts: CreateVoiceProviderOptions): Pro
   } catch {
     /* offline / bridge down → mock */
   }
-  return new MockProvider({ bridgeBase, fetchImpl });
+  return new MockProvider({ bridgeBase, fetchImpl, getWorkspaceModes: opts.getWorkspaceModes });
 }
 
 export { BolnaProvider, type BolnaProviderDeps } from './bolnaProvider';

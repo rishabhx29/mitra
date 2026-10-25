@@ -10,7 +10,7 @@
 // - Simulated latency: listening → thinking (400–900ms) → speaking, with a
 //   synthetic speech envelope during speaking so the persona animates without
 //   real TTS (rAF-guarded: flat 0 under vitest's node environment).
-import type { SessionState, ToolName, TranscriptEntry, VoiceProvider } from '../shared/types';
+import type { SessionState, ToolName, TranscriptEntry, VoiceProvider, WorkspaceMode } from '../shared/types';
 import { t, type Lang } from '../i18n';
 import {
   DEFAULT_BRIDGE_BASE,
@@ -28,6 +28,12 @@ export interface MockProviderDeps {
   idFactory?: () => string;
   /** Speaking-duration model (ms per utterance); default ~260ms/word, clamped. */
   speakDuration?: (text: string) => number;
+  /**
+   * Live view of Settings.workspaceModes so the workspace_mode intent matches
+   * the CURRENT presets (panel edits apply mid-session, no provider rebuild).
+   * Empty/absent → mode matching is off.
+   */
+  getWorkspaceModes?: () => WorkspaceMode[];
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +97,109 @@ const LAUNCH_RES: RegExp[] = [
   /^(.+?)\s+चालू करो$/,
 ];
 
+// 7) set_reminder — Ultron port rows 2–3 (clean-room phrasing). Minutes-only
+//    scope per the ledger; Devanagari digits are mapped to ASCII first and
+//    मिनट is accepted as the unit word. Patterns run on the digit-normalized
+//    text and yield {minutes, text} (text optional).
+const REMIND_ME_RES: RegExp[] = [
+  /^(?:please\s+)?remind me (?:in|after)\s+(\d+) ?(?:m\b|mins?\b|minutes?\b|मिनट)\s*(?:(?:to|for|ki)\s+(.+))?$/,
+];
+const TIMER_RES: RegExp[] = [
+  /^(\d+) ?(?:minutes?|mins?|मिनट) ka timer\s*(?:(?:to|for|ki)\s+(.+))?$/,
+  /^(\d+) मिनट का टाइमर\s*(?:(?:कि|ki)\s+(.+))?$/,
+  /^(\d+) मिनट बाद(?:\s+(.+?))?\s*(?:याद दिलाओ|याद दिलाना|रिमाइंडर दो|रिमाइंडर)?$/,
+];
+
+/** Minutes window for reminders: ≥1 and ≤ a day (nonsense values clarify instead). */
+const MIN_REMINDER_MINUTES = 1;
+const MAX_REMINDER_MINUTES = 24 * 60;
+
+/** Devanagari digits → ASCII so "४ मिनट" parses like "4 मिनट". */
+function normalizeDigits(text: string): string {
+  return text.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d)));
+}
+
+function parseReminder(text: string): { minutes: number; text: string } | null {
+  const norm = normalizeDigits(text);
+  const attempt = (res: RegExp[]): { minutes: number; text: string } | null => {
+    for (const re of res) {
+      const m = re.exec(norm);
+      if (!m) continue;
+      const minutes = Number.parseInt(m[1] ?? '', 10);
+      if (!Number.isFinite(minutes) || minutes < MIN_REMINDER_MINUTES || minutes > MAX_REMINDER_MINUTES) {
+        continue; // out-of-range nonsense → try the next shape / fall through
+      }
+      return { minutes, text: cleanupCapture(m[2] ?? '') };
+    }
+    return null;
+  };
+  return attempt(REMIND_ME_RES) ?? attempt(TIMER_RES);
+}
+
+// 8) memory — Ultron port row 5 (Cerebro-lite). Recall-all first (exact), then
+//    recall-with-query, then remember. Our own en/Hinglish/Devanagari phrasing.
+const MEMORY_RECALL_ALL_RES = [
+  /^(?:what do you remember|what all do you remember|kya yaad hai|kya yaad rakha hai|क्या याद है)$/,
+];
+const MEMORY_RECALL_RES: RegExp[] = [
+  /^(?:what do you remember|what do you know)\s+about\s+(.+)$/,
+  /^(.+?)\s+ke baare me(?:in)?\s+kya yaad hai$/,
+  /^(?:kya\s+)?yaad hai\s+(.+?)(?:\s+ke baare me(?:in)?)?$/,
+  /^(.+?)\s+के बारे में क्या याद है$/,
+  /^(?:क्या\s+)?याद है\s+(.+?)(?:\s+के बारे में)?$/,
+];
+const MEMORY_REMEMBER_RES: RegExp[] = [
+  /^remember\s+(?:that\s+|this\s+|it\s+)?(.+)$/,
+  /^yaad rakho(?:\s+(?:ki|ke))?\s+(.+)$/,
+  /^yaad rakhna(?:\s+ki)?\s+(.+)$/,
+  /^याद रख(?:ो|ना|िए)(?:\s+कि)?\s+(.+)$/,
+];
+
+/**
+ * A capture that is only a connector word means the regex backtracked past a
+ * dangling "remember that" / "yaad rakho ki" — that is no memory, that is a
+ * clarify. (firstCapture cannot express this, so memory gets its own matcher.)
+ */
+const MEMORY_CONNECTOR_WORDS = new Set(['that', 'this', 'it', 'ki', 'ke', 'कि']);
+
+function parseMemory(text: string): MockIntent | null {
+  if (MEMORY_RECALL_ALL_RES.some((re) => re.test(text))) return { kind: 'memory_recall_all' };
+  for (const re of MEMORY_RECALL_RES) {
+    const m = re.exec(text);
+    const query = m ? cleanupCapture(m[1] ?? '') : '';
+    if (query && !MEMORY_CONNECTOR_WORDS.has(query)) return { kind: 'memory_recall', query };
+  }
+  for (const re of MEMORY_REMEMBER_RES) {
+    const m = re.exec(text);
+    const memo = m ? cleanupCapture(m[1] ?? '') : '';
+    if (memo && !MEMORY_CONNECTOR_WORDS.has(memo)) return { kind: 'memory_remember', text: memo };
+  }
+  return null;
+}
+
+// 9) lock_workstation — Ultron port row 4 (Windows LockWorkStation).
+const LOCK_RES: RegExp[] = [
+  /^lock(?:\s+(?:my|the|mera|meri))?\s+(?:computer|pc|laptop|screen|workstation|system)$/,
+  /^(?:computer|pc|laptop|screen|workstation|system)\s+lock(?:\s+(?:karo|kar do))?$/,
+  /^lockdown$/,
+  /^lock(?:\s+(?:karo|kar do))?$/,
+  /^(?:स्क्रीन|कंप्यूटर|लैपटॉप|सिस्टम)\s*लॉक(?:\s*करो)?$/,
+  /^लॉक(?:\s*करो)?$/,
+];
+
+// 10) status_briefing — Ultron port row 6. A standalone `status` word (battery
+//     status, status batao, …) or a how-are-you greeting triggers the briefing.
+const STATUS_WORD_RE = /(?:^|\s)status(?:\s|$)/;
+// Anchored so "ye kaise ho gaya" is not a greeting; small prefix/suffix sets
+// keep the natural forms ("kaise ho bhai", "sab kaisa hai").
+const STATUS_HOW_RES: RegExp[] = [
+  /^how are you(?:\s+doing(?:\s+today)?)?(?:\s+today)?$/,
+  /^(?:tum\s+|aap\s+|bhai\s+)?kaise ho(?:\s+(?:bhai|yaar))?$/,
+  /^(?:sab\s+)?kaisa hai(?:\s+(?:bhai|yaar|sab))?$/,
+  /^(?:tum\s+|aap\s+|भाई\s+)?कैसे हो(?:\s+(?:भाई|आप))?$/,
+  /^(?:सब\s+)?कैसा है(?:\s+(?:भाई|सब))?$/,
+];
+
 function extractUrl(text: string): string | null {
   const trimTail = (s: string): string => s.replace(/[.,;:!?)\]}'"]+$/, '');
   const absolute = ABSOLUTE_URL_RE.exec(text);
@@ -118,13 +227,63 @@ function firstCapture(text: string, patterns: RegExp[]): string | null {
 }
 
 /**
+ * Tokenize for workspace-mode alias matching: lowercase, apostrophes removed
+ * (so "let's code" and "lets code" agree), other punctuation becomes a space
+ * (Devanagari letters are \p{L} and survive). Word-boundary matching avoids
+ * substring false hits like a short alias inside "status".
+ */
+function tokenizeUtterance(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/['’`]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * Does the utterance contain one of the mode's aliases (as whole words, in
+ * order)? Modes are checked in settings order, aliases in listed order — the
+ * first hit wins, so a user can prioritize by reordering in the panel.
+ */
+export function matchWorkspaceMode(raw: string, modes: WorkspaceMode[]): WorkspaceMode | null {
+  const tokens = tokenizeUtterance(raw);
+  if (tokens.length === 0) return null;
+  for (const mode of modes) {
+    for (const alias of mode.aliases) {
+      const aliasTokens = tokenizeUtterance(alias);
+      if (aliasTokens.length === 0 || aliasTokens.length > tokens.length) continue;
+      let hit = false;
+      for (let i = 0; i + aliasTokens.length <= tokens.length; i++) {
+        let ok = true;
+        for (let j = 0; j < aliasTokens.length; j++) {
+          if (tokens[i + j] !== aliasTokens[j]) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          hit = true;
+          break;
+        }
+      }
+      if (hit) return mode;
+    }
+  }
+  return null;
+}
+
+/**
  * Parse one utterance into a MockIntent, or null when nothing matched
  * (the caller replies with a friendly clarification instead).
  * Checks run in priority order: stop → language → opencode → add-todo →
- * url → launch-app (so "open opencode and build …" never becomes launch_app
- * and "open github.com" never becomes a bogus app alias).
+ * reminder → memory → lock → status → url → workspace-mode → launch-app.
+ * Specific tools beat the broad alias match (so "remind me to study in 10
+ * minutes" stays a reminder even when a mode aliases "study"), and a URL
+ * beats a mode whose alias shares the domain ("open movie.com" stays a link).
+ * `modes` is the CURRENT settings.workspaceModes (empty → mode matching off).
  */
-export function parseIntent(raw: string): MockIntent | null {
+export function parseIntent(raw: string, modes: WorkspaceMode[] = []): MockIntent | null {
   if (!raw || !raw.trim()) return null;
   const text = normalizeUtterance(raw);
 
@@ -139,8 +298,29 @@ export function parseIntent(raw: string): MockIntent | null {
   const add = firstCapture(text, ADD_RES);
   if (add) return { kind: 'add_todo', text: add };
 
+  const reminder = parseReminder(text);
+  if (reminder) {
+    return reminder.text
+      ? { kind: 'set_reminder', minutes: reminder.minutes, text: reminder.text }
+      : { kind: 'set_reminder', minutes: reminder.minutes, text: '' };
+  }
+
+  const memory = parseMemory(text);
+  if (memory) return memory;
+
+  if (LOCK_RES.some((re) => re.test(text))) return { kind: 'lock_workstation' };
+
+  if (STATUS_WORD_RE.test(text) || STATUS_HOW_RES.some((re) => re.test(text))) {
+    return { kind: 'status_briefing' };
+  }
+
   const url = extractUrl(text);
   if (url) return { kind: 'open_url', url };
+
+  if (modes.length > 0) {
+    const mode = matchWorkspaceMode(text, modes);
+    if (mode) return { kind: 'workspace_mode', mode: mode.name };
+  }
 
   const app = firstCapture(text, LAUNCH_RES);
   if (app) {
@@ -164,6 +344,22 @@ export function intentToTool(
       return { tool: 'run_opencode_task', args: { prompt: intent.prompt } };
     case 'open_url':
       return { tool: 'open_url', args: { url: intent.url } };
+    case 'workspace_mode':
+      return { tool: 'workspace_mode', args: { name: intent.mode } };
+    case 'set_reminder':
+      return { tool: 'set_reminder', args: { minutes: intent.minutes, text: intent.text } };
+    case 'lock_workstation':
+      return { tool: 'lock_workstation', args: {} };
+    case 'status_briefing':
+      return { tool: 'status_briefing', args: {} };
+    case 'memory_remember':
+      return { tool: 'memory', args: { action: 'remember', text: intent.text } };
+    case 'memory_recall_all':
+      // The memory tool requires a query for `recall`; "what do you remember"
+      // wants EVERYTHING → the `list` action (server contract, tools/index).
+      return { tool: 'memory', args: { action: 'list' } };
+    case 'memory_recall':
+      return { tool: 'memory', args: { action: 'recall', text: intent.query } };
     default:
       return null;
   }
@@ -214,6 +410,7 @@ export class MockProvider implements VoiceProvider, MockVoiceProviderExtras {
   private readonly random: () => number;
   private readonly idFactory: () => string;
   private readonly speakMs: (text: string) => number;
+  private readonly getWorkspaceModes?: () => WorkspaceMode[];
 
   constructor(deps: MockProviderDeps = {}) {
     this.bridgeBase = deps.bridgeBase ?? DEFAULT_BRIDGE_BASE;
@@ -222,6 +419,7 @@ export class MockProvider implements VoiceProvider, MockVoiceProviderExtras {
     this.random = deps.random ?? Math.random;
     this.idFactory = deps.idFactory ?? (() => globalThis.crypto?.randomUUID?.() ?? `mock-${Date.now()}`);
     this.speakMs = deps.speakDuration ?? defaultSpeakDuration;
+    this.getWorkspaceModes = deps.getWorkspaceModes;
   }
 
   /** Start a fresh session: listening + a friendly greeting (no network). */
@@ -276,7 +474,7 @@ export class MockProvider implements VoiceProvider, MockVoiceProviderExtras {
     await this.delay(400 + Math.floor(this.random() * 501));
     if (this.disposed) return; // aborted mid-thinking (stop()) — no zombie tool call
 
-    const intent = parseIntent(text);
+    const intent = parseIntent(text, this.getWorkspaceModes?.() ?? []);
     if (!intent) {
       await this.speak(t(this.language, 'voice.clarify'));
       return;

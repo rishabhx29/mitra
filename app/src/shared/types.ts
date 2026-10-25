@@ -5,7 +5,17 @@ export type PersonaKind = 'orb' | 'avatar';
 
 export type SessionState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
-export type ToolName = 'notion_add_todo' | 'launch_app' | 'run_opencode_task' | 'open_url';
+export type ToolName =
+  | 'notion_add_todo'
+  | 'launch_app'
+  | 'run_opencode_task'
+  | 'open_url'
+  | 'workspace_mode'
+  | 'set_reminder'
+  | 'list_reminders'
+  | 'lock_workstation'
+  | 'memory'
+  | 'status_briefing';
 
 export interface ToolRequest {
   id: string;
@@ -32,6 +42,53 @@ export interface AppAlias {
   command: string;
 }
 
+/**
+ * A named bundle of apps + URLs the agent can launch in one go (Ultron port
+ * ledger row 1: workspace modes). `apps` entries are alias names resolved
+ * against Settings.apps (same launcher aliases); `urls` open in the browser.
+ * Aliases are our own en+Hinglish phrasing — clean-room, nothing copied.
+ */
+export interface WorkspaceMode {
+  id: string;
+  name: string;
+  aliases: string[];
+  apps: string[];
+  urls: string[];
+}
+
+/**
+ * `data` payload of a successful workspace_mode run (Ultron port row 1, shape
+ * frozen by src/server/tools/workspace.ts): what the bundle launched, what it
+ * opened, and what it skipped (with reasons) — consumed by ModesPanel "Run now".
+ */
+export interface WorkspaceModeRunData {
+  mode: string;
+  launched: string[];
+  opened: string[];
+  skipped?: Array<{ name: string; reason: string }>;
+}
+
+/** One Cerebro-lite memory entry (Ultron port row 5, shape frozen by src/server/memory.ts). */
+export interface MemoryEntry {
+  id: string;
+  text: string;
+  /** Epoch ms when the note was stored. */
+  ts: number;
+}
+
+/**
+ * Args for the `memory` tool (Ultron port row 5): remember stores a fact;
+ * recall scores entries against a query (the query is REQUIRED — the tool
+ * rejects a bare recall; "recall everything" is the `list` action); forget
+ * deletes one entry by id. `forget` extends the landed remember/recall/list so
+ * the Memory panel can offer delete without a second tool.
+ */
+export type MemoryToolArgs =
+  | { action: 'remember'; text: string }
+  | { action: 'recall'; text: string }
+  | { action: 'list' }
+  | { action: 'forget'; id: string };
+
 export type NotionConfig = { mock: true } | { mock: false; token: string; databaseId: string };
 
 export interface Settings {
@@ -48,6 +105,12 @@ export interface Settings {
    * persisted settings and DEFAULT_SETTINGS stay valid; absent/'' = no avatar.
    */
   avatarVrmPath?: string;
+  /**
+   * Workspace-mode presets (docs/ULTRON_PORT.md row 1). Optional so existing
+   * persisted settings stay valid; when absent the store degrades to
+   * DEFAULT_SETTINGS.workspaceModes on load.
+   */
+  workspaceModes?: WorkspaceMode[];
 }
 
 export interface TranscriptEntry {
@@ -78,4 +141,94 @@ export const DEFAULT_SETTINGS: Settings = {
     { name: 'browser', command: 'start https://www.google.com' },
   ],
   notion: { mock: true },
+  // Ultron port row 1: four workspace presets. Apps reference the shipped
+  // launcher aliases only (notepad/terminal/browser — extended alias lists
+  // degrade gracefully to a "skipped" line via the workspace_mode tool);
+  // alias phrasing is original en+Hinglish+Devanagari, not copied from any source.
+  workspaceModes: [
+    {
+      id: 'coding',
+      name: 'Coding',
+      aliases: [
+        'coding',
+        'coding mode',
+        'work mode',
+        'dev mode',
+        'code karna hai',
+        'coding karna hai',
+        'kaam karna hai',
+        'kaam pe lag jao',
+        "let's code",
+        'code karne ka man hai',
+        'coding ka man hai',
+        'कोडिंग',
+      ],
+      apps: ['terminal'],
+      urls: ['https://github.com'],
+    },
+    {
+      id: 'gaming',
+      name: 'Gaming',
+      aliases: [
+        'gaming',
+        'gaming mode',
+        'game time',
+        'game on',
+        'game khelna hai',
+        'game khelein',
+        'khelne ka man hai',
+        'gaming mode on karo',
+        'gaming karenge',
+        'lets game',
+        'esports mode',
+        'play mode',
+        'गेमिंग',
+      ],
+      apps: [],
+      urls: ['https://store.steampowered.com'],
+    },
+    {
+      id: 'study',
+      name: 'Study',
+      aliases: [
+        'study',
+        'study mode',
+        'focus mode',
+        'study time',
+        'deep work',
+        'padhai',
+        'padhai karni hai',
+        'padhai ka man hai',
+        'padhai karenge',
+        'padhai mode',
+        'study karna hai',
+        'focus karna hai',
+        'पढ़ाई',
+      ],
+      apps: ['notepad', 'browser'],
+      urls: ['https://www.wikipedia.org'],
+    },
+    {
+      id: 'chill',
+      name: 'Chill',
+      aliases: [
+        'chill',
+        'chill mode',
+        'relax',
+        'movie',
+        'movie time',
+        'movie dekhni hai',
+        'movie dekhna hai',
+        'chill karna hai',
+        'aaram karna hai',
+        'entertainment mode',
+        'chill time',
+        'bore ho raha hun',
+        'break le lo',
+        'मूवी',
+      ],
+      apps: [],
+      urls: ['https://www.youtube.com'],
+    },
+  ],
 };

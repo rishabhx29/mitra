@@ -13,7 +13,9 @@ import HomePanel from './HomePanel';
 import PersonaPicker from './PersonaPicker';
 import PermissionsPanel from './PermissionsPanel';
 import AppsPanel from './AppsPanel';
+import ModesPanel from './ModesPanel';
 import NotionPanel from './NotionPanel';
+import MemoryPanel from './MemoryPanel';
 import HotkeyPanel from './HotkeyPanel';
 import LanguagePanel from './LanguagePanel';
 import TranscriptLog from './TranscriptLog';
@@ -25,7 +27,9 @@ const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }>
   { id: 'persona', labelKey: 'settings.persona', icon: 'persona' },
   { id: 'permissions', labelKey: 'settings.permissions', icon: 'permissions' },
   { id: 'apps', labelKey: 'settings.apps', icon: 'apps' },
+  { id: 'modes', labelKey: 'settings.modes', icon: 'modes' },
   { id: 'notion', labelKey: 'settings.notion', icon: 'notion' },
+  { id: 'memory', labelKey: 'settings.memory', icon: 'memory' },
   { id: 'hotkey', labelKey: 'settings.hotkey', icon: 'hotkey' },
   { id: 'language', labelKey: 'settings.language', icon: 'language' },
   { id: 'transcript', labelKey: 'settings.transcript', icon: 'transcript' },
@@ -205,8 +209,14 @@ export default function SettingsApp() {
           <div className={section === 'apps' ? '' : 'hidden'}>
             {section === 'apps' && <AppsPanel {...panelProps} />}
           </div>
+          <div className={section === 'modes' ? '' : 'hidden'}>
+            {section === 'modes' && <ModesPanel {...panelProps} />}
+          </div>
           <div className={section === 'notion' ? '' : 'hidden'}>
             {section === 'notion' && <NotionPanel {...panelProps} />}
+          </div>
+          <div className={section === 'memory' ? '' : 'hidden'}>
+            {section === 'memory' && <MemoryPanel {...panelProps} />}
           </div>
           <div className={section === 'hotkey' ? '' : 'hidden'}>
             {section === 'hotkey' && <HotkeyPanel {...panelProps} />}

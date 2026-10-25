@@ -15,6 +15,18 @@ export type MockIntent =
   | { kind: 'launch_app'; alias: string }
   | { kind: 'opencode_task'; prompt: string }
   | { kind: 'open_url'; url: string }
+  /** Ultron port row 1: launch a workspace bundle by its mode name. */
+  | { kind: 'workspace_mode'; mode: string }
+  /** Ultron port rows 2–3: minutes from now, optional message. */
+  | { kind: 'set_reminder'; minutes: number; text: string }
+  /** Ultron port row 4: lock the workstation (Windows LockWorkStation). */
+  | { kind: 'lock_workstation' }
+  /** Ultron port row 6: battery/uptime/provider briefing. */
+  | { kind: 'status_briefing' }
+  /** Ultron port row 5: Cerebro-lite memory. */
+  | { kind: 'memory_remember'; text: string }
+  | { kind: 'memory_recall_all' }
+  | { kind: 'memory_recall'; query: string }
   | { kind: 'stop' }
   | { kind: 'language_switch'; language: 'en' | 'hi' };
 

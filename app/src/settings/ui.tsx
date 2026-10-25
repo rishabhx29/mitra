@@ -199,6 +199,19 @@ const ICON_PATHS: Record<string, ReactNode> = {
       <path d="M3 4.5h10M3 8h10M3 11.5h6.5" />
     </>
   ),
+  modes: (
+    <>
+      <rect x="1.8" y="5.5" width="8.7" height="8.7" rx="1.5" />
+      <path d="M5.5 5.5V3.3A1.5 1.5 0 0 1 7 1.8h6.2A1.5 1.5 0 0 1 14.7 3.3V9.5a1.5 1.5 0 0 1-1.5 1.5H11" />
+    </>
+  ),
+  memory: (
+    <>
+      <ellipse cx="8" cy="3.6" rx="5.6" ry="1.8" />
+      <path d="M2.4 3.6v8.8c0 1 2.5 1.8 5.6 1.8s5.6-.8 5.6-1.8V3.6" />
+      <path d="M2.4 8c0 1 2.5 1.8 5.6 1.8s5.6-.8 5.6-1.8" />
+    </>
+  ),
   hotkey: (
     <>
       <rect x="1.5" y="4" width="13" height="8" rx="1.5" />
