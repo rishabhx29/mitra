@@ -283,6 +283,10 @@ test('terminal permission off → opencode intent gets the permission-denied rep
   // through the same e2e hook and wait for the fresh session before typing.
   await emitMainChannel('mitra:e2e-show-overlay');
   await expectOverlayVisible(true);
+  // The re-summon starts a FRESH session; submitting before its provider exists
+  // drops the input ("Dev text input only works in mock mode"). Wait for the
+  // greeting like test 4 does (expectProviderReady).
+  await expectProviderReady();
   await submitDevInput('open opencode and build me a portfolio site');
   // The bridge answers 403 {ok:false, summary:"Permission denied: terminal"};
   // MockProvider.failureReply localizes that exact shape.

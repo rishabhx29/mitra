@@ -16,6 +16,7 @@ import { PersonaStage } from '../persona/PersonaStage';
 import type { VrmLicenseInfo } from '../persona/avatar/licenseMeta';
 import { baseName, isValidVrmFileName, readVrmLicense } from './vrmMeta';
 import { getMitra } from './mitraClient';
+import { useAvatarModelUrl } from './useAvatarModelUrl';
 import { SAMPLE_AVATARS } from '../shared/ipc';
 import { Badge, Btn, Card, RadioCard, Tt } from './ui';
 import type { SaveFn } from './types';
@@ -53,6 +54,9 @@ function KindCards({
   save: SaveFn;
 }) {
   const kinds: PersonaKind[] = ['orb', 'avatar'];
+  // Live mini-render of the loaded avatar (first visit auto-loads the bundled
+  // sample) so the card shows a real character, not just an icon.
+  const avatarThumbUrl = useAvatarModelUrl(settings);
   return (
     <Card micro={tt('settings.micro.persona')} title={tt('settings.persona')}>
       <div className="flex gap-3" role="radiogroup" aria-label={tt('settings.persona')}>
@@ -73,10 +77,20 @@ function KindCards({
                   }}
                 />
               ) : (
-                <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-400" aria-hidden="true">
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M4.5 20c1.4-3.6 4.2-5.5 7.5-5.5s6.1 1.9 7.5 5.5" strokeLinecap="round" />
-                </svg>
+                avatarThumbUrl ? (
+                  <div
+                    data-testid="avatar-thumb"
+                    className="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-black/40"
+                    aria-label={tt('settings.persona.avatarThumb')}
+                  >
+                    <PersonaStage persona="avatar" state="idle" vrmUrl={avatarThumbUrl} licenseVisible={false} />
+                  </div>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-400" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4.5 20c1.4-3.6 4.2-5.5 7.5-5.5s6.1 1.9 7.5 5.5" strokeLinecap="round" />
+                  </svg>
+                )
               )
             }
           />

@@ -40,6 +40,7 @@ export const hi: Record<string, string> = {
     'या अपने कंप्यूटर से चुनें — फ़ाइल मित्र के ऐप डेटा में कॉपी हो जाती है, ताकि अवतार अगली बार लॉन्च पर वापस आ जाए।',
   'settings.persona.vrmBrowse': 'फ़ाइल चुनें',
   'settings.persona.vrmFullscreen': 'फुल स्क्रीन',
+  'settings.persona.avatarThumb': 'वर्तमान अवतार पूर्वावलोकन',
   'settings.persona.fsHint': 'घुमाने के लिए खींचें · बंद करने के लिए Esc',
   'settings.persona.vrmUseSample': 'सैंपल अवतार लगाएँ',
   'settings.persona.vrmDropActive': 'छोड़कर लोड करें',
