@@ -290,3 +290,31 @@ test('"stop" ends the session and the overlay auto-dismisses', async () => {
   // SessionController hides the window ~900ms after the session reaches idle.
   await expectOverlayVisible(false);
 });
+
+// 8. Console (docs/CONSOLE_PLAN.md): opens from the Home button, its input
+//    drives the SAME intent→tool pipeline, and the thread shows a tool card.
+test('console opens from Home, runs a tool from typed input, shows the card', async () => {
+  // The settings window is on the Conversation log after test 6 — go Home first.
+  await settingsPage!.getByRole('button', { name: 'Home' }).click();
+
+  const consoleWindowPromise = electronApp.waitForEvent('window', { timeout: 30_000 });
+  await settingsPage!.getByRole('button', { name: /console/i }).first().click();
+  const consolePage = await consoleWindowPromise;
+  expect(consolePage.url()).toContain('window=console');
+  await consolePage.waitForSelector('[data-testid="console-root"]', { timeout: 30_000 });
+
+  const before = (await listMockNotionItems()).length;
+  const input = consolePage.getByTestId('console-input');
+  await input.fill('add chai to my todo list');
+  await input.press('Enter');
+
+  // Tool card appears in the thread and the mock board carries the item.
+  const thread = consolePage.getByTestId('console-thread');
+  await expect(thread.locator('[data-testid="console-tool-card"]').first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(thread).toContainText('chai', { timeout: 20_000 });
+  await expect
+    .poll(async () => (await listMockNotionItems()).length, { timeout: 20_000 })
+    .toBe(before + 1);
+});
