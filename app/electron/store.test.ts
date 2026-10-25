@@ -186,3 +186,48 @@ describe('workspaceModes persistence (ULTRON_PORT row 1)', () => {
     expect(store.load().workspaceModes).toEqual(DEFAULT_SETTINGS.workspaceModes);
   });
 });
+
+// Console chat settings (docs/CONSOLE_PLAN.md "Architecture deltas" item 1):
+// optional Settings.console with an optional model pin for /api/brain/chat.
+describe('console settings persistence (CONSOLE_PLAN)', () => {
+  let userData: string;
+
+  beforeEach(() => {
+    userData = makeTempDir();
+  });
+
+  it('round-trips a pinned console model', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    const settings: Settings = { ...DEFAULT_SETTINGS, console: { model: 'qwen2.5:3b' } };
+    expect(store.save(settings)).toBe(true);
+    expect(store.load()).toEqual(settings);
+    expect(store.load().console?.model).toBe('qwen2.5:3b');
+  });
+
+  it('absent console field stays absent through save + load', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    expect(store.save({ ...DEFAULT_SETTINGS })).toBe(true);
+    const loaded = store.load();
+    expect(loaded.console).toBeUndefined();
+  });
+
+  it('keeps an empty console object and an empty model string (harmless: brain auto-picks)', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    expect(store.save({ ...DEFAULT_SETTINGS, console: {} })).toBe(true);
+    expect(store.load().console).toEqual({});
+    expect(store.save({ ...DEFAULT_SETTINGS, console: { model: '' } })).toBe(true);
+    expect(store.load().console).toEqual({ model: '' });
+  });
+
+  it('degrades a malformed console field to undefined without losing other fields', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    writeFileSync(
+      store.path,
+      JSON.stringify({ ...DEFAULT_SETTINGS, console: 5, hotkey: 'Ctrl+K' }),
+      'utf-8',
+    );
+    const loaded = store.load();
+    expect(loaded.console).toBeUndefined();
+    expect(loaded.hotkey).toBe('Ctrl+K');
+  });
+});

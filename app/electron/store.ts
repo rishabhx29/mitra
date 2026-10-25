@@ -21,6 +21,14 @@ export const WorkspaceModeSchema: z.ZodType<WorkspaceMode> = z.object({
   urls: z.array(z.string()),
 });
 
+// Console chat settings (docs/CONSOLE_PLAN.md). `model` is a plain string (no
+// min(1)): an empty/blank model is meaningless but harmless — the brain's
+// chatWithBrain trims it and falls back to auto-pick, so no need to nuke the
+// whole object over it.
+export const ConsoleConfigSchema: z.ZodType<{ model?: string }> = z.object({
+  model: z.string().optional(),
+});
+
 export const NotionConfigSchema: z.ZodType<NotionConfig> = z.union([
   z.object({ mock: z.literal(true) }),
   z.object({ mock: z.literal(false), token: z.string(), databaseId: z.string() }),
@@ -47,6 +55,8 @@ export const SettingsSchema: z.ZodType<Settings> = z.object({
   // Optional workspace presets (docs/ULTRON_PORT.md row 1): absent degrades to
   // the shipped presets; an explicitly empty array is kept (user cleared them).
   workspaceModes: z.array(WorkspaceModeSchema).optional(),
+  // Optional console settings (docs/CONSOLE_PLAN.md): absent = auto-pick brain.
+  console: ConsoleConfigSchema.optional(),
 });
 
 /**
@@ -74,6 +84,10 @@ export function sanitizeSettings(input: unknown): Settings {
     // shipped presets (safeParse(undefined) on an optional schema would succeed
     // with undefined and skip the default).
     workspaceModes: pick(z.array(WorkspaceModeSchema), raw['workspaceModes'], DEFAULT_SETTINGS.workspaceModes ?? []),
+    // Console settings (docs/CONSOLE_PLAN.md): the default IS undefined, so an
+    // optional schema with an undefined fallback round-trips — absent stays
+    // absent, and a malformed object (console: 5) degrades to undefined.
+    console: pick(ConsoleConfigSchema.optional(), raw['console'], DEFAULT_SETTINGS.console),
   };
 }
 

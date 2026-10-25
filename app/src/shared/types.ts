@@ -111,6 +111,13 @@ export interface Settings {
    * DEFAULT_SETTINGS.workspaceModes on load.
    */
   workspaceModes?: WorkspaceMode[];
+  /**
+   * Console chat settings (docs/CONSOLE_PLAN.md "Architecture deltas" item 1).
+   * Optional so existing persisted settings and DEFAULT_SETTINGS stay valid.
+   * `model` pins the local Ollama brain used by /api/brain/chat (the bridge's
+   * chatWithBrain prefers it over the auto-pick); absent/'' = auto-pick.
+   */
+  console?: { model?: string };
 }
 
 export interface TranscriptEntry {

@@ -2,6 +2,8 @@
 //   GET  /api/health        → liveness + whether we're in mock mode
 //   POST /api/session       → mints a Bolna Web Call session ({mock:true} with no keys)
 //   POST /api/tools/:name   → ACL-gated tool execution returning a ToolResult
+//   GET  /api/brain/status  → Console status bar: {brain, model?} (cached probe)
+//   POST /api/brain/chat    → Console conversation (Ollama tier-1, mock tier-2)
 // fetch, env, clock, paths and all tool adapters are injectable so vitest is pure.
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import type { Server } from 'node:http';
@@ -11,12 +13,24 @@ import { checkPermission } from './acl';
 import { isKnownTool, createToolDispatcher } from './tools/index';
 import { createMemoryMockNotion, type MockNotion } from './mockNotion';
 import { createMemoryStore, type MemoryStore } from './memory';
+import {
+  chatWithBrain,
+  mockConversationalReply,
+  pickBrain,
+  sanitizeChatMessages,
+  type BrainStatus,
+} from './brain';
 import type { ReminderService } from './tools/reminder';
 import type { OsLike, PowerMonitorLike } from './tools/status';
 import type { FetchLike } from './tools/notion';
 
 export const DEFAULT_BRIDGE_HOST = '127.0.0.1';
 export const DEFAULT_BRIDGE_PORT = 8765;
+/**
+ * Console status bar: how long a /api/brain/status probe result stays fresh.
+ * Longer than the detection timeout so the bar never hammers /api/tags.
+ */
+export const DEFAULT_BRAIN_STATUS_TTL_MS = 30_000;
 /**
  * Session-mint endpoint per plan + research/04 §"Session minting". Note: the
  * @bolna/web-call SDK's d.ts mentions "/web-call/freeswitch-session" — the URL is
@@ -46,6 +60,8 @@ export interface BridgeDeps {
   os?: OsLike;
   /** Working directory for opencode runs. */
   cwd?: string;
+  /** How long GET /api/brain/status caches its pickBrain probe (tests shrink it). */
+  brainStatusTtlMs?: number;
   onProgress?: (tool: ToolName, msg: string) => void;
   log?: (msg: string) => void;
 }
@@ -110,6 +126,55 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       onProgress: deps.onProgress,
     });
   const log = deps.log ?? (() => {});
+
+  // ---- Console brain routes (docs/CONSOLE_PLAN.md "Architecture deltas" item 2) ----
+  // The brain rides the SAME injected fetchImpl as the session mint / tools, so
+  // tests fake Ollama without any network. The main process is the proxy: the
+  // renderer never talks to Ollama directly, so there are no CORS issues with
+  // the local model server. Both routes never throw — any failure degrades to
+  // the deterministic mock conversational reply (mock-mode rule).
+  const brainStatusTtlMs = deps.brainStatusTtlMs ?? DEFAULT_BRAIN_STATUS_TTL_MS;
+  let brainStatusCache: { at: number; status: BrainStatus } | null = null;
+
+  // Console status bar: {brain:'ollama', model} or {brain:'mock'}. Cheap: one
+  // cached probe per TTL window instead of one /api/tags per render tick.
+  app.get('/api/brain/status', async (_req: Request, res: Response) => {
+    try {
+      const now = Date.now();
+      if (!brainStatusCache || now - brainStatusCache.at >= brainStatusTtlMs) {
+        const status = await pickBrain({ fetchImpl });
+        brainStatusCache = { at: now, status };
+      }
+      const status = brainStatusCache.status;
+      res.json(status.brain === 'ollama' ? { brain: 'ollama', model: status.model } : { brain: 'mock' });
+    } catch (err) {
+      // pickBrain never throws, but a broken cache read must still answer.
+      log(`brain status probe failed: ${err instanceof Error ? err.message : String(err)}`);
+      res.json({ brain: 'mock' });
+    }
+  });
+
+  // Console conversation: {messages:[{role,content}], language:'en'|'hi'} →
+  // {brain:'ollama'|'mock', model?, text}. Ollama tier-1 (or the pinned
+  // settings.console.model), deterministic mock tier-2 — never 5xx.
+  app.post('/api/brain/chat', async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as { messages?: unknown; language?: unknown };
+    const language = body.language === 'hi' ? 'hi' : 'en';
+    try {
+      const messages = sanitizeChatMessages(body.messages);
+      const result = await chatWithBrain({
+        messages,
+        language,
+        fetchImpl,
+        preferredModel: settings().console?.model?.trim() || undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      // chatWithBrain never throws; this is defense in depth for the route edge.
+      log(`brain chat failed: ${err instanceof Error ? err.message : String(err)}`);
+      res.json({ brain: 'mock', text: mockConversationalReply(sanitizeChatMessages(body.messages), language) });
+    }
+  });
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true, service: 'mitra-bridge', mock: bolnaKeys(env) === null });
