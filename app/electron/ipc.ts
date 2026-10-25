@@ -77,6 +77,8 @@ export interface RegisterIpcDeps {
   onSessionEvent?: (event: SessionEvent) => void;
   /** Toggles the fullscreen avatar viewer window (main creates/closes the singleton). */
   onToggleAvatarFullscreen?: () => void;
+  /** Toggles the Console window (main creates/closes the singleton). */
+  onToggleConsole?: () => void;
   /** userData dir for the avatar copy target (main passes app.getPath('userData')). */
   userDataDir?: string;
   /** fs subset for the avatar copy; defaults to real node fs. */
@@ -111,6 +113,9 @@ export function registerIpcHandlers(deps: RegisterIpcDeps): void {
 
   // Fullscreen avatar viewer: main owns the singleton window lifecycle.
   ipcMain.on(IPC.toggleAvatarFullscreen, () => deps.onToggleAvatarFullscreen?.());
+
+  // Console window: main owns the singleton lifecycle (docs/CONSOLE_PLAN.md).
+  ipcMain.on(IPC.toggleConsole, () => deps.onToggleConsole?.());
 
   // Full-transcript pipe (UI-polish wave): the overlay circle shows only the newest
   // agent/system reply, so the overlay reports every provider transcript entry here

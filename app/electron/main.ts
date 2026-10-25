@@ -21,6 +21,7 @@ import { createReminderService } from '../src/server/tools/reminder';
 import { startBridge } from '../src/server/bridge';
 import { createOverlayController, createOverlayWindow, type OverlayWindowLike } from './windows/overlay';
 import { createAvatarFullscreenWindow } from './windows/fullscreen';
+import { createConsoleWindow } from './windows/console';
 import { createSettingsWindow, type SettingsWindowLike } from './windows/settings';
 
 const PRELOAD_PATH = join(__dirname, '../preload/index.js');
@@ -30,6 +31,7 @@ let overlayWindow: OverlayWindowLike | null = null;
 let settingsWindow: SettingsWindowLike | null = null;
 let tray: TrayLike | null = null;
 let fullscreenWindow: OverlayWindowLike | null = null;
+let consoleWindow: OverlayWindowLike | null = null;
 
 // ---- single instance ----
 // A second launch focuses settings instead of spawning a duplicate tray icon.
@@ -42,7 +44,7 @@ if (!gotSingleInstanceLock) {
 
 function loadRenderer(
   win: Pick<OverlayWindowLike, 'loadURL' | 'loadFile'>,
-  which: 'overlay' | 'settings' | 'fullscreen',
+  which: 'overlay' | 'settings' | 'fullscreen' | 'console',
 ): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
   // E2E affordance (Task F): with MITRA_E2E=1 the overlay page is loaded with
@@ -110,6 +112,7 @@ function bootstrap(): void {
     onSessionEvent: sendToSettings,
     userDataDir: app.getPath('userData'),
     onToggleAvatarFullscreen: toggleAvatarFullscreen,
+    onToggleConsole: toggleConsole,
     onSettingsChanged: (next, previous) => {
       settings = next;
       if (next.hotkey !== previous.hotkey) {
@@ -124,6 +127,7 @@ function bootstrap(): void {
     Menu,
     onShowSettings: showSettings,
     onToggleOverlay: toggleOverlay,
+    onOpenConsole: toggleConsole,
     onQuit: () => app.quit(),
   });
 
@@ -155,6 +159,23 @@ function bootstrap(): void {
     });
     fullscreenWindow.on('closed', () => {
       fullscreenWindow = null;
+    });
+  }
+
+  // ---- Mitra Console (docs/CONSOLE_PLAN.md): singleton toggle; Esc closes too ----
+  function toggleConsole(): void {
+    if (consoleWindow && !(consoleWindow.isDestroyed?.() ?? false)) {
+      consoleWindow.close();
+      consoleWindow = null;
+      return;
+    }
+    consoleWindow = createConsoleWindow({
+      BrowserWindow,
+      preloadPath: PRELOAD_PATH,
+      loadPage: (win) => loadRenderer(win, 'console'),
+    });
+    consoleWindow.on('closed', () => {
+      consoleWindow = null;
     });
   }
 

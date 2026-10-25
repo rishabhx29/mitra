@@ -23,6 +23,8 @@ export interface TrayDeps {
   Menu: MenuFactory;
   onShowSettings: () => void;
   onToggleOverlay: () => void;
+  /** Opens the Mitra Console window (docs/CONSOLE_PLAN.md; singleton toggle). */
+  onOpenConsole?: () => void;
   onQuit: () => void;
 }
 
@@ -32,6 +34,7 @@ export function createTray(deps: TrayDeps): TrayLike {
 
   const template: MenuItemConstructorOptions[] = [
     { label: 'Show settings', click: () => deps.onShowSettings() },
+    { label: 'Open Console', click: () => deps.onOpenConsole?.() },
     { label: 'Toggle overlay', click: () => deps.onToggleOverlay() },
     { type: 'separator' },
     { label: 'Quit', click: () => deps.onQuit() },

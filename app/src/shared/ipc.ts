@@ -13,6 +13,8 @@ export const IPC = {
   hideOverlay: 'mitra:hide-overlay',
   setAvatarFile: 'mitra:set-avatar-file',
   toggleAvatarFullscreen: 'mitra:toggle-avatar-fullscreen',
+  /** Open/close the Console window (docs/CONSOLE_PLAN.md; singleton, Esc also closes). */
+  toggleConsole: 'mitra:toggle-console',
 } as const;
 
 export type SessionEvent =
@@ -68,6 +70,8 @@ export interface MitraApi {
   onOverlayHidden(cb: () => void): () => void;
   /** Open/close the fullscreen avatar viewer window (singleton; Esc also closes it). */
   toggleAvatarFullscreen(): void;
+  /** Open/close the Console chat window (singleton; Esc also closes it). */
+  toggleConsole(): void;
   /**
    * Copy a .vrm (picked file or bundled sample) into userData/avatars/current.vrm
    * (atomic write, mkdir -p), persist Settings.avatarVrmPath, and return the

@@ -220,3 +220,105 @@ body,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Console window (docs/CONSOLE_PLAN.md §"UI/UX"): faint grid + radial orb-color
+   glow backdrop, subtle scanline shimmer, mono boot/cursor/dot accents. Same
+   --orb-a/--orb-b tokens as the settings shell (set by ConsoleApp on its root).
+--------------------------------------------------------------------------- */
+
+.console-backdrop {
+  background:
+    radial-gradient(
+      760px 520px at 20% 44%,
+      color-mix(in oklab, var(--orb-a) 14%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      680px 500px at 88% 26%,
+      color-mix(in oklab, var(--orb-b) 12%, transparent),
+      transparent 62%
+    ),
+    #07070c;
+}
+
+/* Faint tech grid, faded toward the edges so text stays readable. */
+.console-grid {
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--orb-a) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--orb-a) 8%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 85% at 50% 42%, black 25%, transparent 78%);
+  mask-image: radial-gradient(ellipse 90% 85% at 50% 42%, black 25%, transparent 78%);
+}
+
+/* Subtle scanlines; the shimmer (a slow background drift) is gated by
+   prefers-reduced-motion below — "reduce" keeps the static overlay only. */
+.console-scanline {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.02) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* Typing dots (Thread). */
+.console-dot {
+  animation: console-dot 1.2s ease-in-out infinite;
+}
+.console-dot:nth-child(2) {
+  animation-delay: 150ms;
+}
+.console-dot:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes console-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* Blinking boot cursor (BootSequence). */
+.console-cursor {
+  animation: console-cursor 1s steps(1) infinite;
+  color: color-mix(in oklab, var(--orb-a) 70%, white);
+}
+
+@keyframes console-cursor {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Thread/boot entries rise in as they append. */
+.console-entry {
+  animation: mitra-rise-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .console-scanline {
+    animation: console-scan 8s linear infinite;
+  }
+}
+
+@keyframes console-scan {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 126px;
+  }
+}

@@ -40,6 +40,8 @@ export function createLocalFallbackApi(): MitraApi {
     onOverlayShown: () => () => {},
     onOverlayHidden: () => () => {},
     toggleAvatarFullscreen: () => {},
+    // No main process to open a console window in — degrade honestly, never throw.
+    toggleConsole: () => {},
     // No main process to log to — degrade honestly (mock-mode rule), never throw.
     reportTranscript: () => {},
     // Browser preview has no main process to copy files into userData —
