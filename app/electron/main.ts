@@ -1,4 +1,4 @@
-// Mitra main process: single-instance lock, boots hidden to tray, overlay + hotkey +
+// Mitra main process: single-instance lock, shows settings on first launch, overlay + hotkey +
 // IPC + settings persistence. Phase-0 stub replaced by Task B (SHELL).
 //
 // Window/toggle patterns adapted from ueli (MIT):
@@ -138,6 +138,12 @@ function bootstrap(): void {
   app.on('window-all-closed', () => {
     /* stay resident in tray */
   });
+
+  // First launch must be VISIBLE: a double-click that silently boots to the
+  // tray looks like "the app didn't open" (second-instance would eventually
+  // reveal it, which is exactly the multi-try symptom). Tray residency still
+  // applies after the user closes the window.
+  showSettings();
 
   app.on('before-quit', () => {
     globalShortcut.unregisterAll();
