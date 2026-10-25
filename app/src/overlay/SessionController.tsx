@@ -16,7 +16,7 @@
 // commands through the mock brain's exact intent path (stable selector:
 // [data-testid="mitra-dev-input"]).
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import type { SessionState, Settings, TranscriptEntry, VoiceProvider } from '../shared/types';
+import type { SessionState, Settings, TranscriptEntry, VoiceProvider, WorkspaceMode } from '../shared/types';
 import { PersonaStage } from '../persona/PersonaStage';
 import { useAudioAnalyser } from '../persona/orb/useAudioAnalyser';
 import { BolnaProvider, MockProvider, createVoiceProvider } from '../voice';
@@ -77,6 +77,11 @@ export function SessionController({ settings, devMode = false }: SessionControll
   const languageRef = useRef(language);
   languageRef.current = language;
 
+  // Current workspace presets for the mock brain's workspace_mode intent
+  // (ref keeps live panel edits visible without rebuilding the provider).
+  const modesRef = useRef<WorkspaceMode[]>(settings.workspaceModes ?? []);
+  modesRef.current = settings.workspaceModes ?? [];
+
   const dismiss = useCallback(dismissOverlay, []);
 
   // ---- persisted avatar: pull bytes via the idempotent IPC copy, make a blob URL ----
@@ -105,7 +110,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
   useEffect(() => {
     let disposed = false;
     setEntries([]); // StrictMode remounts must not double the greeting
-    void createVoiceProvider({ language }).then((provider) => {
+    void createVoiceProvider({ language, getWorkspaceModes: () => modesRef.current }).then((provider) => {
       if (disposed) {
         void provider.stop();
         return;
