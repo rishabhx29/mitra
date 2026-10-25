@@ -3,19 +3,36 @@
 // dispatcher can enforce it and vitest can pin the full matrix.
 import type { Permissions, ToolName } from '../shared/types';
 
-/** Gate names mirror the keys of `Permissions` in shared/types (frozen). */
+/**
+ * Gate names mirror the keys of `Permissions` in shared/types (frozen).
+ * ToolGate adds 'none' for read-only local tools that need no grant at all —
+ * they are always allowed and can never produce a denial reason. (The union
+ * lives on TOOL_GATES values, NOT on PermissionGate, so UI code that indexes
+ * Permissions by gate keeps compiling.)
+ */
 export type PermissionGate = keyof Permissions;
+export type ToolGate = PermissionGate | 'none';
 
-export const TOOL_GATES: Readonly<Record<ToolName, PermissionGate>> = {
+export const TOOL_GATES: Readonly<Record<ToolName, ToolGate>> = {
+  // Ultron port rows 1/2/3/4: workspace bundles, reminders and the workstation
+  // lock all act on the machine the way launch_app does → launcher gate.
   notion_add_todo: 'notion',
   launch_app: 'launcher',
   run_opencode_task: 'terminal',
   open_url: 'browser',
+  workspace_mode: 'launcher',
+  set_reminder: 'launcher',
+  list_reminders: 'launcher',
+  lock_workstation: 'launcher',
+  // Ultron port row 5: memory is notes semantics → notion gate.
+  memory: 'notion',
+  // Ultron port row 6: status briefing is read-only + local → no gate.
+  status_briefing: 'none',
 };
 
 export interface PermissionDecision {
   allowed: boolean;
-  gate: PermissionGate;
+  gate: ToolGate;
   /** Set only when denied; exact string used as the ToolResult summary. */
   reason?: string;
 }
@@ -26,6 +43,9 @@ export interface PermissionDecision {
  */
 export function checkPermission(tool: ToolName, permissions: Permissions): PermissionDecision {
   const gate = TOOL_GATES[tool];
+  if (gate === 'none') {
+    return { allowed: true, gate };
+  }
   if (permissions[gate]) {
     return { allowed: true, gate };
   }

@@ -133,3 +133,56 @@ describe('sanitizeSettings', () => {
     }
   });
 });
+
+describe('workspaceModes persistence (ULTRON_PORT row 1)', () => {
+  let userData: string;
+
+  beforeEach(() => {
+    userData = makeTempDir();
+  });
+
+  it('round-trips the shipped presets', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    expect(store.save({ ...DEFAULT_SETTINGS })).toBe(true);
+    const loaded = store.load();
+    expect(loaded.workspaceModes).toEqual(DEFAULT_SETTINGS.workspaceModes);
+    expect(loaded.workspaceModes?.map((m) => m.id)).toEqual(['coding', 'gaming', 'study', 'chill']);
+  });
+
+  it('defaults to the shipped presets when the field is absent from the file', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    const { workspaceModes: _dropped, ...withoutModes } = DEFAULT_SETTINGS;
+    store.save(withoutModes as Settings);
+    expect(store.load().workspaceModes).toEqual(DEFAULT_SETTINGS.workspaceModes);
+  });
+
+  it('degrades an invalid field to the shipped presets without losing other fields', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    writeFileSync(store.path, JSON.stringify({ ...DEFAULT_SETTINGS, workspaceModes: 'nope', hotkey: 'Ctrl+K' }), 'utf-8');
+    const loaded = store.load();
+    expect(loaded.workspaceModes).toEqual(DEFAULT_SETTINGS.workspaceModes);
+    expect(loaded.hotkey).toBe('Ctrl+K');
+  });
+
+  it('keeps an explicitly empty list (user cleared the presets)', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    store.save({ ...DEFAULT_SETTINGS, workspaceModes: [] });
+    expect(store.load().workspaceModes).toEqual([]);
+  });
+
+  it('keeps user-edited modes and degrades a single bad mode independently', () => {
+    const store = createSettingsStore({ app: { getPath: () => userData } });
+    const custom = [
+      { id: 'focus', name: 'Focus', aliases: ['focus mode'], apps: ['terminal'], urls: [] },
+    ];
+    store.save({ ...DEFAULT_SETTINGS, workspaceModes: custom });
+    expect(store.load().workspaceModes).toEqual(custom);
+    writeFileSync(
+      store.path,
+      JSON.stringify({ ...DEFAULT_SETTINGS, workspaceModes: [...custom, { id: '', name: '' }] }),
+      'utf-8',
+    );
+    // One malformed mode invalidates the array → whole field degrades to defaults.
+    expect(store.load().workspaceModes).toEqual(DEFAULT_SETTINGS.workspaceModes);
+  });
+});

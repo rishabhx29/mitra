@@ -6,8 +6,9 @@
 //   - toggle + hide: _reference/ueli/src/main/Core/SearchWindow/BrowserWindowToggler/BrowserWindowToggler.ts
 // (see windows/overlay.ts for the deliberate deviations: showInactive instead of
 // show+focus, no minimize-before-hide).
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, Tray } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, powerMonitor, screen, Tray } from 'electron';
 import { join } from 'node:path';
+import os from 'node:os';
 import { IPC, type SessionEvent } from '../src/shared/ipc';
 import type { Settings } from '../src/shared/types';
 import { registerIpcHandlers } from './ipc';
@@ -15,6 +16,8 @@ import { createHotkeyManager } from './hotkey';
 import { createSettingsStore } from './store';
 import { createTray, type TrayLike } from './tray';
 import { createMockNotion } from '../src/server/mockNotion';
+import { createMemoryStore } from '../src/server/memory';
+import { createReminderService } from '../src/server/tools/reminder';
 import { startBridge } from '../src/server/bridge';
 import { createOverlayController, createOverlayWindow, type OverlayWindowLike } from './windows/overlay';
 import { createAvatarFullscreenWindow } from './windows/fullscreen';
@@ -158,9 +161,21 @@ function bootstrap(): void {
   // ---- local bridge (127.0.0.1:8765): Bolna session minting + permission-gated tools ----
   // Wired by the orchestrator after Phase 1 (Task C). mockNotion persists to userData so
   // demo items survive restarts; session endpoint default lives in bridge.ts.
+  // Ultron-port injections (docs/ULTRON_PORT.md rows 1-6): the memory store persists to
+  // userData/mitra-memory.json; reminders fire a real Electron Notification (bootstrap
+  // runs after app.whenReady(), the earliest point notifications may be shown);
+  // status_briefing probes the real powerMonitor + node:os.
   void startBridge({
     settings: () => settings,
     mockNotion: createMockNotion({ filePath: join(app.getPath('userData'), 'mock-notion.json') }),
+    memory: createMemoryStore({ filePath: join(app.getPath('userData'), 'mitra-memory.json') }),
+    reminders: createReminderService({
+      notify: (note) => {
+        new Notification({ title: note.title, body: note.body }).show();
+      },
+    }),
+    power: powerMonitor,
+    os,
     log: (message) => console.log(`[mitra:bridge] ${message}`),
     onProgress: (tool, message) => {
       const event: SessionEvent = {

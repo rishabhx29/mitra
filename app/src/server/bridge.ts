@@ -10,6 +10,9 @@ import { DEFAULT_SETTINGS, type Settings, type ToolName, type ToolRequest, type 
 import { checkPermission } from './acl';
 import { isKnownTool, createToolDispatcher } from './tools/index';
 import { createMemoryMockNotion, type MockNotion } from './mockNotion';
+import { createMemoryStore, type MemoryStore } from './memory';
+import type { ReminderService } from './tools/reminder';
+import type { OsLike, PowerMonitorLike } from './tools/status';
 import type { FetchLike } from './tools/notion';
 
 export const DEFAULT_BRIDGE_HOST = '127.0.0.1';
@@ -33,6 +36,14 @@ export interface BridgeDeps {
   port?: number;
   bolnaSessionUrl?: string;
   mockNotion?: MockNotion;
+  /** Shared reminder service (main injects the Electron-Notification notifier). */
+  reminders?: ReminderService;
+  /** Cerebro-lite memory store (main persists it to <userData>/mitra-memory.json). */
+  memory?: MemoryStore;
+  /** Electron powerMonitor probe for status_briefing. */
+  power?: PowerMonitorLike;
+  /** node:os probe for status_briefing (defaults to the real node:os downstream). */
+  os?: OsLike;
   /** Working directory for opencode runs. */
   cwd?: string;
   onProgress?: (tool: ToolName, msg: string) => void;
@@ -91,6 +102,10 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       fetchImpl: deps.fetchImpl,
       env,
       mockNotion,
+      reminders: deps.reminders,
+      memory: deps.memory,
+      power: deps.power,
+      os: deps.os,
       cwd: deps.cwd,
       onProgress: deps.onProgress,
     });
@@ -195,12 +210,14 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       // ACL at the HTTP edge so denials surface as 403 and never reach execution;
       // the dispatcher re-checks internally (defense in depth).
       const decision = checkPermission(name, settings().permissions);
+      console.log(`[mitra:DEBUG] tool=${name} perms=${JSON.stringify(settings().permissions)} decision=${JSON.stringify(decision)}`);
       if (!decision.allowed) {
         res.status(403).json({ id, ok: false, summary: decision.reason ?? 'Permission denied' });
         return;
       }
 
       const result = await executeTool({ id, tool: name, args });
+      console.log(`[mitra:DEBUG] tool=${name} executeTool resolved`);
       res.json(result);
     } catch (err) {
       res

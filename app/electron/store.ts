@@ -4,13 +4,21 @@
 import { readFileSync, renameSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { z, type ZodType } from 'zod';
-import { DEFAULT_SETTINGS, type AppAlias, type NotionConfig, type Permissions, type Settings } from '../src/shared/types';
+import { DEFAULT_SETTINGS, type AppAlias, type NotionConfig, type Permissions, type Settings, type WorkspaceMode } from '../src/shared/types';
 
 // ---- zod schema (mirrors shared/types.ts Settings exactly) ----
 
 export const AppAliasSchema: z.ZodType<AppAlias> = z.object({
   name: z.string(),
   command: z.string(),
+});
+
+export const WorkspaceModeSchema: z.ZodType<WorkspaceMode> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  aliases: z.array(z.string()),
+  apps: z.array(z.string()),
+  urls: z.array(z.string()),
 });
 
 export const NotionConfigSchema: z.ZodType<NotionConfig> = z.union([
@@ -36,6 +44,9 @@ export const SettingsSchema: z.ZodType<Settings> = z.object({
   // Optional (pre-approved contract change): absent / '' both degrade to undefined,
   // so a renderer can clear the persisted avatar by patching it to ''.
   avatarVrmPath: z.string().min(1).optional(),
+  // Optional workspace presets (docs/ULTRON_PORT.md row 1): absent degrades to
+  // the shipped presets; an explicitly empty array is kept (user cleared them).
+  workspaceModes: z.array(WorkspaceModeSchema).optional(),
 });
 
 /**
@@ -59,6 +70,10 @@ export function sanitizeSettings(input: unknown): Settings {
     apps: pick(z.array(AppAliasSchema), raw['apps'], DEFAULT_SETTINGS.apps),
     notion: pick(NotionConfigSchema, raw['notion'], DEFAULT_SETTINGS.notion),
     avatarVrmPath: pick(z.string().min(1).optional(), raw['avatarVrmPath'], DEFAULT_SETTINGS.avatarVrmPath),
+    // NOT z.optional() here on purpose: an absent field must fall back to the
+    // shipped presets (safeParse(undefined) on an optional schema would succeed
+    // with undefined and skip the default).
+    workspaceModes: pick(z.array(WorkspaceModeSchema), raw['workspaceModes'], DEFAULT_SETTINGS.workspaceModes ?? []),
   };
 }
 
