@@ -197,9 +197,16 @@ test('bridge is up and reports mock mode (no API keys)', async () => {
 });
 
 test('settings window opens and renders the permissions UI', async () => {
-  const windowPromise = electronApp.waitForEvent('window');
-  await emitMainChannel('mitra:e2e-show-settings');
-  settingsPage = await windowPromise;
+  // Since the first-launch-visible fix, the settings window already exists at
+  // boot (no new window event fires when the hook re-shows it) — find it; the
+  // hook stays as the fallback if the window was ever closed first.
+  settingsPage =
+    electronApp.windows().find((w) => w.url().includes('window=settings')) ??
+    (await (async () => {
+      const windowPromise = electronApp.waitForEvent('window');
+      await emitMainChannel('mitra:e2e-show-settings');
+      return windowPromise;
+    })());
   expect(settingsPage.url()).toContain('window=settings');
   await expect(settingsPage.getByText('Mitra Settings')).toBeVisible();
   // Open the ACL panel and see the four gates (PermissionsPanel, Task E).
