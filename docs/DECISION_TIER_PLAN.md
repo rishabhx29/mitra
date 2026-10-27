@@ -74,4 +74,15 @@ Keep the `Orb` props contract (state/colors/amplitudeRef) and audio reactivity:
 
 Ensure the chosen persona is visible EVERYWHERE: overlay (auto-loads persisted/sample model — done), Console stage (done), settings thumbnail (done). Sweep: verify Console + overlay both show the avatar when `persona:'avatar'` and a path exists; fix any gap found.
 
-## Execution: 2 parallel agents (tools+router / orb+avatar sweep) → gates → e2e → thematic commits → exe rebuild.
+## 2b. GENERAL app control + browse (user clarification: calendar was an example — the agent must handle ANY app and browse as commanded)
+
+| Tool | Utterances | Behavior |
+|---|---|---|
+| `open_any_app` {name} | "open spotify/steam/whatsapp/<anything>", "<name> kholo" | Resolver chain: settings.apps alias → **Start-Menu .lnk scan** (ProgramData + AppData Start Menu dirs, normalized fuzzy match on filename) → `start <name>` shell fallback. Launch by opening the matched .lnk (Windows resolves it). Unknown → list closest matches. Gate: **launcher** |
+| `close_app` {name} | "close spotify", "<name> band karo" | Resolve exe name from the same .lnk index → `taskkill /IM <exe>` (graceful first, no /F). Gate: **launcher** |
+| `web_search` {query, engine?} | "google X", "search the web for X", "web pe X dhundo" | Opens `https://www.google.com/search?q=<enc>`. Gate: **browser** |
+| open_url generalization | "open github.com", "go to reddit.com/r/xyz", "<domain> kholo" | Already exists — widen intent regexes to bare domains/URLs (validate scheme, prepend https://). Gate: **browser** |
+
+Laya `criteria` gains: open_any_app, close_app, web_search labels. The .lnk index builds once per bridge start (fast dir walk) and refreshes lazily.
+
+## Execution: 2 parallel agents (tools+router / orb+avatar sweep) → gates → e2e → thematic commits → orchestrator integration (Laya contract reconciliation + §2b generalization) → exe rebuild.
