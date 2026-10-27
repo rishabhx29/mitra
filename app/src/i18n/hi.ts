@@ -83,6 +83,9 @@ export const hi: Record<string, string> = {
   'settings.language.help': 'वॉइस एजेंट, कैप्शन और यह विंडो इसी भाषा में चलेंगे।',
   'settings.language.en': 'English',
   'settings.language.hi': 'हिन्दी',
+  // Voice panel: optional Laya decision tier (docs/DECISION_TIER_PLAN.md §1)
+  'settings.voice.layaOn': 'तेज़ फ़ैसले: Laya ✓',
+  'settings.voice.layaOff': 'तेज़ फ़ैसले: Laya बंद (pip install laya + scripts/start-laya.ps1)',
   'settings.transcript.empty': 'अभी कोई बातचीत नहीं — हॉटकी दबाकर मित्र से बात करें।',
   'settings.transcript.desktopOnly': 'बातचीत की घटनाएँ मित्र डेस्कटॉप ऐप में दिखती हैं।',
   'settings.transcript.user': 'आप',

@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "composite": true
   },
-  "include": ["electron/**/*.ts", "src/shared/**/*.ts", "src/server/**/*.ts", "e2e/**/*.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": ["electron/**/*.ts", "src/shared/**/*.ts", "src/server/**/*.ts", "src/voice/intents.ts", "src/voice/types.ts", "src/i18n/**/*.ts", "e2e/**/*.ts", "vitest.config.ts", "playwright.config.ts"]
 }

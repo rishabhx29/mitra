@@ -5,12 +5,18 @@
 // stack:
 //   - cycle all SessionStates
 //   - switch orb <-> avatar (PersonaKind)
-//   - pick orb colors (defaults = DEFAULT_SETTINGS.orbColors)
+//   - pick orb colors (defaults = DEFAULT_SETTINGS.orbColors) — they drive the
+//     wave-orb's shell rim, gradient core and the three ribbon hues live
 //   - drop a .vrm file (no bundled model) → embedded license panel
 //   - fake speech: generated WAV tone through a real <audio> element, so the
 //     orb's AnalyserNode path AND wawa-lipsync path are exercised for real;
 //   - mock mode with zero audio: synthetic oscillating amplitude ref drives
 //     orb + avatar fallback mouth.
+//
+// Orb look: the wave-ribbon redesign (docs/DECISION_TIER_PLAN.md §3) replaced
+// the old single-sphere blob outright — glass shell + gradient core + three
+// wavy ribbons. Behavior config lives in orb/orbTheme.ts (palette/surface) and
+// orb/orbWave.ts (ribbon speeds/wobble/brightness).
 //
 // Note on MediaElementSource ownership: one <audio> element can only ever be
 // attached to one MediaElementAudioSourceNode. When the persona flips while
@@ -152,8 +158,8 @@ export default function PersonaHarness() {
         <div>
           <h1 className="text-sm font-semibold">Persona dev harness</h1>
           <p className="mt-1 text-[11px] text-zinc-400">
-            Route: <code className="text-zinc-300">?window=settings#/dev/persona</code> (needs an
-            App.tsx route — see PersonaHarness.tsx header).
+            Wave-ribbon orb in a glass sphere + VRM avatar. Route:{' '}
+            <code className="text-zinc-300">?window=settings#/dev/persona</code>
           </p>
         </div>
 

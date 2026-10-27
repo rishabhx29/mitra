@@ -110,6 +110,28 @@ any failure (bad key, offline, mint error) degrades to `{mock:true}` and the
 `MockProvider` takes over. Real Notion is configured in Settings → Notion board
 (token + database id); until then the mock board is used.
 
+## Fast decisions (optional Laya tier)
+
+Utterances are understood in three tiers (docs/DECISION_TIER_PLAN.md §1):
+deterministic intents (instant) → **Laya** (~50ms on-device classifier) → chat
+LLM (Ollama, else the mock reply). Laya is **optional** — with no sidecar running
+the app behaves exactly as before. To enable it (Python 3.10+ required):
+
+```powershell
+cd app
+powershell -ExecutionPolicy Bypass -File scripts\start-laya.ps1          # port 8899
+powershell -ExecutionPolicy Bypass -File scripts\start-laya.ps1 -Port 9000
+```
+
+The script checks `python`, runs `pip install laya` when the package is missing,
+and starts `laya-serve --port 8899` in a new window. The bridge probes
+`http://127.0.0.1:8899` (override with the `LAYA_URL` environment variable) and
+exposes `POST /api/brain/route {text}` → `{tool?, args?, confidence, via}` plus
+`GET /api/brain/laya` → `{available}` — the Voice panel badge shows
+"Fast decisions: Laya ✓" when the sidecar is live. Laya only NAMES a tool; the
+tool's arguments are extracted by deterministic regexes (`src/server/router.ts`),
+and any probe/timeout/shape deviation degrades to `via:'none'` → chat.
+
 ## Tests
 
 **Unit** — logic only (no electron import, no jsdom/WebGL), via `vitest.config.ts`:

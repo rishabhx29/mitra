@@ -15,7 +15,12 @@ export type ToolName =
   | 'list_reminders'
   | 'lock_workstation'
   | 'memory'
-  | 'status_briefing';
+  | 'status_briefing'
+  // Real-world task tools (docs/DECISION_TIER_PLAN.md §2). Each degrades
+  // gracefully when its service is absent (mock mode is first-class).
+  | 'note_notepad'
+  | 'youtube_search'
+  | 'agenda_today';
 
 export interface ToolRequest {
   id: string;

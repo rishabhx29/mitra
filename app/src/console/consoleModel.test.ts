@@ -272,9 +272,14 @@ describe('runSubmit — chat + non-tool intents', () => {
       lang: 'en',
     });
 
-    expect(log).toHaveLength(1);
-    expect(log[0].url).toBe('http://127.0.0.1:8765/api/brain/chat');
-    const body = JSON.parse(String(log[0].init?.body)) as {
+    // Decision tier first (docs/DECISION_TIER_PLAN.md §1): the route endpoint is
+    // asked (and answers via:'none' here — the chat body has no tool) BEFORE the
+    // chat LLM is spent.
+    expect(log).toHaveLength(2);
+    expect(log[0].url).toBe('http://127.0.0.1:8765/api/brain/route');
+    expect(JSON.parse(String(log[0].init?.body))).toEqual({ text: 'who are you?' });
+    expect(log[1].url).toBe('http://127.0.0.1:8765/api/brain/chat');
+    const body = JSON.parse(String(log[1].init?.body)) as {
       messages: Array<{ role: string; content: string }>;
       language: string;
     };
@@ -290,6 +295,48 @@ describe('runSubmit — chat + non-tool intents', () => {
     if (status?.type === 'status') {
       expect(status.status).toEqual({ brain: 'ollama', model: 'qwen2.5:3b' });
     } else throw new Error('expected status update');
+  });
+
+  it('no intent + route returns a tool → tool card + summary on the same ACL-gated path, NO chat call', async () => {
+    const { fetch, log } = fakeFetch((url) => {
+      if (url.endsWith('/api/brain/route')) {
+        return jsonResponse({ tool: 'note_notepad', args: { text: 'hello there' }, confidence: 0.9, via: 'laya' });
+      }
+      if (url.endsWith('/api/tools/note_notepad')) {
+        return jsonResponse({ id: 'x', ok: true, summary: 'Note saved to mitra-notes.txt' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const actions = collector();
+    await runSubmit('jot down hello there', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
+
+    expect(log.some((c) => c.url.endsWith('/api/brain/chat'))).toBe(false);
+    const tool = actions.find((a) => a.type === 'tool-result');
+    if (tool?.type === 'tool-result') {
+      expect(tool.tool).toBe('note_notepad');
+      expect(tool.ok).toBe(true);
+      expect(tool.summary).toBe('Note saved to mitra-notes.txt');
+    } else throw new Error('expected tool-result');
+    const agent = lastAction(actions);
+    if (agent.type === 'agent-line') expect(agent.text).toBe('Note saved to mitra-notes.txt');
+    else throw new Error('expected agent-line');
+  });
+
+  it('no intent + routed tool fails (403 carrying a ToolResult) → tool card + localized denial', async () => {
+    const { fetch } = fakeFetch((url) => {
+      if (url.endsWith('/api/brain/route')) {
+        return jsonResponse({ tool: 'youtube_search', args: { query: 'x' }, confidence: 0.9, via: 'laya' });
+      }
+      return jsonResponse({ id: 'x', ok: false, summary: 'Permission denied: browser' }, 403);
+    });
+    const actions = collector();
+    await runSubmit('play something on youtube please', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
+    const tool = actions.find((a) => a.type === 'tool-result');
+    if (tool?.type === 'tool-result') expect(tool.ok).toBe(false);
+    else throw new Error('expected tool-result');
+    const agent = lastAction(actions);
+    if (agent.type === 'agent-line') expect(agent.text).toBe(t('en', 'voice.denied.browser'));
+    else throw new Error('expected agent-line');
   });
 
   it('no intent + chat endpoint missing (404) → mock clarify fallback (zero local models still works)', async () => {

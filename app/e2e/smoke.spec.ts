@@ -32,6 +32,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { mkdtempSync, rmSync } from 'node:fs';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -151,7 +152,38 @@ async function expectProviderReady(): Promise<void> {
   });
 }
 
+/**
+ * Fail fast when something already listens on the bridge port (the prereq at the
+ * top of this file, now ENFORCED): with a leftover dev instance owning
+ * 127.0.0.1:8765, the app under test cannot bind its bridge (startBridge degrades
+ * silently) and every HTTP assertion — health, mock board, permission denials —
+ * would be answered by the WRONG process. Symptom of that state: tests 1–5 pass
+ * while test 6 times out with a "simulated (…)" caption instead of the denial.
+ * A TCP connect probe is used (not a bind probe — Windows SO_REUSEADDR semantics
+ * make "can I bind?" unreliable): connect succeeds → occupied; ECONNREFUSED →
+ * free; timeout → treated as occupied (conservative — fail with the remedy).
+ */
+async function assertBridgePortFree(timeoutMs = 2_000): Promise<void> {
+  const occupied = await new Promise<boolean>((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port: 8765 });
+    const done = (isOccupied: boolean): void => {
+      socket.destroy();
+      resolve(isOccupied);
+    };
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false)); // ECONNREFUSED → nothing listens → free
+    socket.setTimeout(timeoutMs, () => done(true));
+  });
+  if (occupied) {
+    throw new Error(
+      'Port 127.0.0.1:8765 is already in use — close any running Mitra/dev instance first. ' +
+        'A leftover instance would own the bridge and receive the tool calls (see the prereq note above).',
+    );
+  }
+}
+
 test.beforeAll(async () => {
+  await assertBridgePortFree();
   userDataDir = mkdtempSync(join(tmpdir(), 'mitra-e2e-'));
   electronApp = await electron.launch({
     // Isolated profile: this run gets its own mitra-settings.json + mock-notion.json

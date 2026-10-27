@@ -83,6 +83,9 @@ export const en: Record<string, string> = {
   'settings.language.help': 'Used by the voice agent, captions and this window.',
   'settings.language.en': 'English',
   'settings.language.hi': 'हिन्दी',
+  // Voice panel: optional Laya decision tier (docs/DECISION_TIER_PLAN.md §1)
+  'settings.voice.layaOn': 'Fast decisions: Laya ✓',
+  'settings.voice.layaOff': 'Fast decisions: Laya off (pip install laya + scripts/start-laya.ps1)',
   'settings.transcript.empty': 'No conversation yet — press the hotkey and talk to Mitra.',
   'settings.transcript.desktopOnly': 'Conversation events stream in the Mitra desktop app.',
   'settings.transcript.user': 'You',

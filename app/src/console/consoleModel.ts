@@ -14,7 +14,7 @@
 //                     zero local models — mock-mode rule, AGENTS.md).
 import type { ToolName, WorkspaceMode } from '../shared/types';
 import { t, type Lang } from '../i18n';
-import { failureReply, intentToTool, parseIntent } from '../voice';
+import { failureReply, fetchRouteDecision, intentToTool, parseIntent, ROUTE_TIMEOUT_MS } from '../voice';
 import { DEFAULT_BRIDGE_BASE } from '../voice/types';
 
 // ---------------------------------------------------------------------------
@@ -227,10 +227,11 @@ function fmt(template: string, vars: Record<string, string>): string {
 
 /**
  * Tool count for the boot line, kept in one place: the ToolName union in
- * src/shared/types.ts has 10 members. (No client-side tool registry exists —
+ * src/shared/types.ts has 13 members (10 base + the 3 real-world tools from
+ * docs/DECISION_TIER_PLAN.md §2). (No client-side tool registry exists —
  * the authoritative list lives behind the bridge's isKnownTool.)
  */
-export const TOOL_COUNT = 10;
+export const TOOL_COUNT = 13;
 
 export function buildBootLines(status: BrainStatus, lang: Lang): string[] {
   const brainLabel =
@@ -289,6 +290,8 @@ export interface ConsoleDeps {
   history?: ChatMessage[];
   /** /api/brain/chat timeout (default 8000ms — plan: 8s → fallback to mock). */
   chatTimeoutMs?: number;
+  /** /api/brain/route timeout (default 1500ms — the fast path stays fast). */
+  routeTimeoutMs?: number;
 }
 
 interface ToolBody {
@@ -304,6 +307,60 @@ interface ChatBody {
 
 function defaultId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `console-${Date.now()}`;
+}
+
+/**
+ * Run one tool on the bridge's ACL-gated /api/tools/:name endpoint and dispatch
+ * the tool-card + agent line. Shared by the deterministic-intent path AND the
+ * decision-tier route path (docs/DECISION_TIER_PLAN.md §1) so both behave
+ * identically (403-aware failureReply, bridge-offline degradation).
+ */
+async function runToolOnBridge(
+  tool: string,
+  args: Record<string, unknown>,
+  ctx: {
+    base: string;
+    fetchImpl: typeof fetch;
+    lang: Lang;
+    idFactory: () => string;
+    now: () => number;
+    dispatch: Dispatch;
+  },
+): Promise<void> {
+  let ok = false;
+  let summary = '';
+  let agentText: string;
+  try {
+    const res = await ctx.fetchImpl(`${ctx.base}/api/tools/${tool}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: ctx.idFactory(), tool, args }),
+    });
+    const body = (await res.json().catch(() => null)) as ToolBody | null;
+    summary = body && typeof body === 'object' && typeof body.summary === 'string' ? body.summary : '';
+    if (res.ok && body?.ok === true) {
+      ok = true;
+      agentText = summary || t(ctx.lang, 'voice.toolError');
+    } else {
+      // HTTP 403 also carries a ToolResult body → failureReply maps "Permission
+      // denied: <gate>" to the localized apology (mockProvider contract).
+      agentText = failureReply(ctx.lang, summary);
+    }
+  } catch {
+    summary = 'bridge-offline';
+    agentText = t(ctx.lang, 'voice.bridgeUnreachable');
+  }
+  // The bridge only returns names from its known-tool list (isKnownTool), so
+  // the widen to ToolName for the action type is safe.
+  ctx.dispatch({
+    type: 'tool-result',
+    id: ctx.idFactory(),
+    ts: ctx.now(),
+    tool: tool as ToolName,
+    summary,
+    ok,
+  });
+  finishAgent(ctx.dispatch, ctx.idFactory, ctx.now, agentText);
 }
 
 /** Synthetic thinking pause so the typing dots are visible on a local bridge (~5ms otherwise). */
@@ -336,8 +393,23 @@ export async function runSubmit(text: string, dispatch: Dispatch, deps: ConsoleD
 
   const intent = parseIntent(trimmed, deps.getWorkspaceModes?.() ?? []);
 
-  // ---- no intent → brain chat (tier 1 ollama, tier 2 mock fallback) --------
+  // ---- no intent → decision tier, then brain chat (plan §1 tier order) -----
   if (!intent) {
+    // Decision tier (docs/DECISION_TIER_PLAN.md §1): deterministic missed →
+    // POST /api/brain/route (server-side parseIntent + optional Laya) BEFORE
+    // the 1-3s chat LLM. Null (bridge down / via:'none' / old bridge) → the
+    // pre-existing chat path below. Keeps the fast path fast (1.5s cap).
+    const routed = await fetchRouteDecision({
+      bridgeBase: base,
+      fetchImpl,
+      text: trimmed,
+      timeoutMs: deps.routeTimeoutMs ?? ROUTE_TIMEOUT_MS,
+    });
+    if (routed) {
+      await runToolOnBridge(routed.tool, routed.args, { base, fetchImpl, lang, idFactory, now, dispatch });
+      return;
+    }
+
     // The current utterance IS the last message; deps.history holds the
     // previous turns (built from the thread before this submit landed).
     const messages: ChatMessage[] = [...(deps.history ?? []), { role: 'user', content: trimmed }];
@@ -383,31 +455,7 @@ export async function runSubmit(text: string, dispatch: Dispatch, deps: ConsoleD
 
   // ---- tool-bound intent → the SAME ACL-gated bridge path as voice ---------
   const { tool, args } = mapped;
-  let ok = false;
-  let summary = '';
-  let agentText: string;
-  try {
-    const res = await fetchImpl(`${base}/api/tools/${tool}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: idFactory(), tool, args }),
-    });
-    const body = (await res.json().catch(() => null)) as ToolBody | null;
-    summary = body && typeof body === 'object' && typeof body.summary === 'string' ? body.summary : '';
-    if (res.ok && body?.ok === true) {
-      ok = true;
-      agentText = summary || t(lang, 'voice.toolError');
-    } else {
-      // HTTP 403 also carries a ToolResult body → failureReply maps "Permission
-      // denied: <gate>" to the localized apology (mockProvider contract).
-      agentText = failureReply(lang, summary);
-    }
-  } catch {
-    summary = 'bridge-offline';
-    agentText = t(lang, 'voice.bridgeUnreachable');
-  }
-  dispatch({ type: 'tool-result', id: idFactory(), ts: now(), tool, summary, ok });
-  finishAgent(dispatch, idFactory, now, agentText);
+  await runToolOnBridge(tool, args, { base, fetchImpl, lang, idFactory, now, dispatch });
 }
 
 /** The mock conversational fallback (plan tier 2): the existing clarify line. */
