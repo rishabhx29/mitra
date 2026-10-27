@@ -5,14 +5,4 @@ import type { Settings } from '../shared/types';
 export type SaveFn = (patch: Partial<Settings>) => void;
 
 /** Which panel is open in the settings window ('home' is the landing page). */
-export type SectionId =
-  | 'home'
-  | 'persona'
-  | 'permissions'
-  | 'apps'
-  | 'modes'
-  | 'notion'
-  | 'memory'
-  | 'hotkey'
-  | 'language'
-  | 'transcript' | 'voice';
+export type SectionId = 'home' | 'assistant' | 'capabilities' | 'activity';

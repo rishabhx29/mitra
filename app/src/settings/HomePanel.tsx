@@ -192,7 +192,7 @@ export default function HomePanel({
         <StatusItem label={tt('home.status.hotkey')}>
           <button
             type="button"
-            onClick={() => onNavigate('hotkey')}
+            onClick={() => onNavigate('assistant')}
             className="focus-orb flex items-center gap-1 rounded-md transition-colors hover:brightness-125"
             title={tt('settings.hotkey.current')}
           >

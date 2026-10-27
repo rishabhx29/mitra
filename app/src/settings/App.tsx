@@ -17,24 +17,18 @@ import ModesPanel from './ModesPanel';
 import NotionPanel from './NotionPanel';
 import MemoryPanel from './MemoryPanel';
 import HotkeyPanel from './HotkeyPanel';
-import LanguagePanel from './LanguagePanel';
-import VoicePanel from './VoicePanel';
+import AssistantPage from './AssistantPage';
+import CapabilitiesPage from './CapabilitiesPage';
+import ActivityPage from './ActivityPage';
 import TranscriptLog from './TranscriptLog';
 import { Icon } from './ui';
 import type { SectionId, SaveFn } from './types';
 
 const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }> = [
   { id: 'home', labelKey: 'settings.home', icon: 'home' },
-  { id: 'persona', labelKey: 'settings.persona', icon: 'persona' },
-  { id: 'permissions', labelKey: 'settings.permissions', icon: 'permissions' },
-  { id: 'apps', labelKey: 'settings.apps', icon: 'apps' },
-  { id: 'modes', labelKey: 'settings.modes', icon: 'modes' },
-  { id: 'notion', labelKey: 'settings.notion', icon: 'notion' },
-  { id: 'memory', labelKey: 'settings.memory', icon: 'memory' },
-  { id: 'hotkey', labelKey: 'settings.hotkey', icon: 'hotkey' },
-  { id: 'language', labelKey: 'settings.language', icon: 'language' },
-  { id: 'voice', labelKey: 'settings.voice.nav', icon: 'persona' },
-  { id: 'transcript', labelKey: 'settings.transcript', icon: 'transcript' },
+  { id: 'assistant', labelKey: 'settings.nav.assistant', icon: 'persona' },
+  { id: 'capabilities', labelKey: 'settings.nav.capabilities', icon: 'permissions' },
+  { id: 'activity', labelKey: 'settings.nav.activity', icon: 'transcript' },
 ];
 
 const TOAST_MS = 1800;
@@ -202,36 +196,20 @@ export default function SettingsApp() {
               <HomePanel settings={settings} tt={tt} onNavigate={setSection} />
             )}
           </div>
-          <div className={section === 'persona' ? '' : 'hidden'}>
-            {section === 'persona' && <PersonaPicker {...panelProps} />}
+          <div className={section === 'assistant' ? '' : 'hidden'}>
+            {section === 'assistant' && <AssistantPage {...panelProps} />}
           </div>
-          <div className={section === 'permissions' ? '' : 'hidden'}>
-            {section === 'permissions' && <PermissionsPanel {...panelProps} />}
+          <div className={section === 'capabilities' ? '' : 'hidden'}>
+            {section === 'capabilities' && <CapabilitiesPage {...panelProps} />}
           </div>
-          <div className={section === 'apps' ? '' : 'hidden'}>
-            {section === 'apps' && <AppsPanel {...panelProps} />}
-          </div>
-          <div className={section === 'modes' ? '' : 'hidden'}>
-            {section === 'modes' && <ModesPanel {...panelProps} />}
-          </div>
-          <div className={section === 'notion' ? '' : 'hidden'}>
-            {section === 'notion' && <NotionPanel {...panelProps} />}
-          </div>
-          <div className={section === 'memory' ? '' : 'hidden'}>
-            {section === 'memory' && <MemoryPanel {...panelProps} />}
-          </div>
-          <div className={section === 'hotkey' ? '' : 'hidden'}>
-            {section === 'hotkey' && <HotkeyPanel {...panelProps} />}
-          </div>
-          <div className={section === 'language' ? '' : 'hidden'}>
-            {section === 'language' && <LanguagePanel {...panelProps} />}
-          </div>
-          <div className={section === 'voice' ? '' : 'hidden'}>
-            {section === 'voice' && <VoicePanel {...panelProps} />}
-          </div>
-          {/* TranscriptLog stays mounted (subscription lives) and toggles visibility. */}
-          <div className={section === 'transcript' ? '' : 'hidden'}>
-            <TranscriptLog tt={tt} visible={section === 'transcript'} />
+          {/* TranscriptLog stays mounted (subscription lives) — ActivityPage
+              provides the page chrome, App supplies the single log instance. */}
+          {/* Always mounted (subscription must capture events before the user
+              opens this page); hidden via the wrapper like the other pages. */}
+          <div className={section === 'activity' ? '' : 'hidden'}>
+            <ActivityPage tt={tt}>
+              <TranscriptLog tt={tt} visible={section === 'activity'} />
+            </ActivityPage>
           </div>
         </div>
       </main>

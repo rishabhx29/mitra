@@ -242,7 +242,7 @@ test('settings window opens and renders the permissions UI', async () => {
   expect(settingsPage.url()).toContain('window=settings');
   await expect(settingsPage.getByText('Mitra Settings')).toBeVisible();
   // Open the ACL panel and see the four gates (PermissionsPanel, Task E).
-  await settingsPage.getByRole('button', { name: 'App permissions' }).click();
+  await settingsPage.getByRole('button', { name: 'Capabilities' }).click();
   await expect(settingsPage.getByText('Terminal & opencode')).toBeVisible();
 });
 
@@ -278,7 +278,7 @@ test('"add milk to my todo list" runs notion_add_todo and shows the result', asy
   // mitra-caption-prev is gone). The full transcript must still exist: the overlay
   // reports every provider entry to main (mitra:report-transcript), which streams it
   // to the settings window's Conversation log. Pin the user's words there instead.
-  await settingsPage!.getByRole('button', { name: 'Conversation log' }).click();
+  await settingsPage!.getByRole('button', { name: 'Activity' }).click();
   await expect(settingsPage!.getByTestId('mitra-transcript-log')).toContainText(
     'add milk to my todo list',
   );
@@ -304,7 +304,7 @@ test('terminal permission off → opencode intent gets the permission-denied rep
   expect(next.permissions.terminal).toBe(false);
   // Re-open the permissions panel first — test 4 left the settings window on the
   // Conversation log section, and role queries skip display:none subtrees.
-  await settingsPage!.getByRole('button', { name: 'App permissions' }).click();
+  await settingsPage!.getByRole('button', { name: 'Capabilities' }).click();
   await expect(
     settingsPage!.getByRole('switch', { name: 'Terminal & opencode' }),
   ).toHaveAttribute('aria-checked', 'false');
