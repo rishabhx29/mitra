@@ -18,6 +18,7 @@ import NotionPanel from './NotionPanel';
 import MemoryPanel from './MemoryPanel';
 import HotkeyPanel from './HotkeyPanel';
 import LanguagePanel from './LanguagePanel';
+import VoicePanel from './VoicePanel';
 import TranscriptLog from './TranscriptLog';
 import { Icon } from './ui';
 import type { SectionId, SaveFn } from './types';
@@ -32,6 +33,7 @@ const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }>
   { id: 'memory', labelKey: 'settings.memory', icon: 'memory' },
   { id: 'hotkey', labelKey: 'settings.hotkey', icon: 'hotkey' },
   { id: 'language', labelKey: 'settings.language', icon: 'language' },
+  { id: 'voice', labelKey: 'settings.voice.nav', icon: 'persona' },
   { id: 'transcript', labelKey: 'settings.transcript', icon: 'transcript' },
 ];
 
@@ -223,6 +225,9 @@ export default function SettingsApp() {
           </div>
           <div className={section === 'language' ? '' : 'hidden'}>
             {section === 'language' && <LanguagePanel {...panelProps} />}
+          </div>
+          <div className={section === 'voice' ? '' : 'hidden'}>
+            {section === 'voice' && <VoicePanel {...panelProps} />}
           </div>
           {/* TranscriptLog stays mounted (subscription lives) and toggles visibility. */}
           <div className={section === 'transcript' ? '' : 'hidden'}>

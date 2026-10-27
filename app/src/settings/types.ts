@@ -15,4 +15,4 @@ export type SectionId =
   | 'memory'
   | 'hotkey'
   | 'language'
-  | 'transcript';
+  | 'transcript' | 'voice';

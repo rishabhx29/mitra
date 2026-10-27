@@ -19,6 +19,7 @@ import { createMockNotion } from '../src/server/mockNotion';
 import { createMemoryStore } from '../src/server/memory';
 import { createReminderService } from '../src/server/tools/reminder';
 import { startBridge } from '../src/server/bridge';
+import { createModelStore } from '../src/server/models';
 import { createOverlayController, createOverlayWindow, type OverlayWindowLike } from './windows/overlay';
 import { createAvatarFullscreenWindow } from './windows/fullscreen';
 import { createConsoleWindow } from './windows/console';
@@ -202,6 +203,10 @@ function bootstrap(): void {
       },
     }),
     power: powerMonitor,
+    models: createModelStore({
+      dir: join(app.getPath('userData'), 'models'),
+      log: (message) => console.log(`[mitra:models] ${message}`),
+    }),
     os,
     log: (message) => console.log(`[mitra:bridge] ${message}`),
     onProgress: (tool, message) => {

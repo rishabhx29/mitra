@@ -88,6 +88,8 @@ export function sanitizeSettings(input: unknown): Settings {
     // optional schema with an undefined fallback round-trips — absent stays
     // absent, and a malformed object (console: 5) degrades to undefined.
     console: pick(ConsoleConfigSchema.optional(), raw['console'], DEFAULT_SETTINGS.console),
+    // Offline STT language (shared/voiceLanguages.ts); absent = en-us default.
+    voiceLanguage: pick(z.string().min(2).max(8).optional(), raw['voiceLanguage'], DEFAULT_SETTINGS.voiceLanguage),
   };
 }
 

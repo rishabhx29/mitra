@@ -12,6 +12,7 @@ import { DEFAULT_SETTINGS, type Settings, type ToolName, type ToolRequest, type 
 import { checkPermission } from './acl';
 import { isKnownTool, createToolDispatcher } from './tools/index';
 import { createMemoryMockNotion, type MockNotion } from './mockNotion';
+import type { ModelStore } from './models';
 import { createMemoryStore, type MemoryStore } from './memory';
 import {
   chatWithBrain,
@@ -50,6 +51,8 @@ export interface BridgeDeps {
   port?: number;
   bolnaSessionUrl?: string;
   mockNotion?: MockNotion;
+  /** Offline STT model store (Vosk zips). Optional: model routes degrade when absent. */
+  models?: ModelStore;
   /** Shared reminder service (main injects the Electron-Notification notifier). */
   reminders?: ReminderService;
   /** Cerebro-lite memory store (main persists it to <userData>/mitra-memory.json). */
@@ -135,6 +138,42 @@ export function createBridgeApp(deps: BridgeDeps): Express {
   // the deterministic mock conversational reply (mock-mode rule).
   const brainStatusTtlMs = deps.brainStatusTtlMs ?? DEFAULT_BRAIN_STATUS_TTL_MS;
   let brainStatusCache: { at: number; status: BrainStatus } | null = null;
+
+  // ---- offline STT models (LocalVoiceProvider; shared/voiceLanguages.ts) ----
+  app.get('/api/models/status', (_req: Request, res: Response) => {
+    res.json({ models: deps.models ? deps.models.statusAll() : [] });
+  });
+
+  app.get('/api/models/status/:lang', (req: Request, res: Response) => {
+    if (!deps.models) {
+      res.status(503).json({ lang: req.params.lang, state: 'error', bytes: 0, approxMb: 0 });
+      return;
+    }
+    res.json(deps.models.status(String(req.params.lang)));
+  });
+
+  app.post('/api/models/download', async (req: Request, res: Response) => {
+    const lang = typeof (req.body as { lang?: unknown })?.lang === 'string' ? (req.body as { lang: string }).lang : '';
+    if (!deps.models || !lang) {
+      res.status(400).json({ ok: false, error: 'bad-request' });
+      return;
+    }
+    // Awaits the idempotent download so success needs no polling; ~40MB
+    // local-network fetches finish well inside default fetch timeouts.
+    const status = await deps.models.ensure(lang);
+    res.json(status);
+  });
+
+  app.get('/api/models/file/:lang', (req: Request, res: Response) => {
+    const bytes = deps.models?.read(String(req.params.lang));
+    if (!bytes) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Length', bytes.byteLength);
+    res.end(bytes);
+  });
 
   // Console status bar: {brain:'ollama', model} or {brain:'mock'}. Cheap: one
   // cached probe per TTL window instead of one /api/tags per render tick.

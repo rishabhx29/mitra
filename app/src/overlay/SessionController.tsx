@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { SessionState, Settings, TranscriptEntry, VoiceProvider, WorkspaceMode } from '../shared/types';
 import { PersonaStage } from '../persona/PersonaStage';
 import { useAudioAnalyser } from '../persona/orb/useAudioAnalyser';
-import { BolnaProvider, MockProvider, createVoiceProvider } from '../voice';
+import { BolnaProvider, LocalVoiceProvider, MockProvider, createVoiceProvider } from '../voice';
 import { t } from '../i18n';
 import { Captions } from './Captions';
 import { decideInactivity } from './timeout';
@@ -60,6 +60,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const mockAmpBox = useRef<{ current: number } | null>(null);
   const bolnaAmpBox = useRef<{ current: number } | null>(null);
+  const localAmpBox = useRef<{ current: number } | null>(null);
 
   // Inactivity clock (docs/DESIGN_BRIEF.md §Overlay): when the current state
   // began. Re-armed on every state change and on every user transcript, so
@@ -76,6 +77,8 @@ export function SessionController({ settings, devMode = false }: SessionControll
   const language = settings.language;
   const languageRef = useRef(language);
   languageRef.current = language;
+  const voiceLangRef = useRef(settings.voiceLanguage);
+  voiceLangRef.current = settings.voiceLanguage;
 
   // Current workspace presets for the mock brain's workspace_mode intent
   // (ref keeps live panel edits visible without rebuilding the provider).
@@ -110,7 +113,11 @@ export function SessionController({ settings, devMode = false }: SessionControll
   useEffect(() => {
     let disposed = false;
     setEntries([]); // StrictMode remounts must not double the greeting
-    void createVoiceProvider({ language, getWorkspaceModes: () => modesRef.current }).then((provider) => {
+    void createVoiceProvider({
+      language,
+      getWorkspaceModes: () => modesRef.current,
+      getVoiceLanguage: () => voiceLangRef.current,
+    }).then((provider) => {
       if (disposed) {
         void provider.stop();
         return;
@@ -118,6 +125,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
       providerRef.current = provider;
       if (provider instanceof MockProvider) mockAmpBox.current = provider.syntheticAmplitude;
       else if (provider instanceof BolnaProvider) bolnaAmpBox.current = provider.agentAmplitude;
+      else if (provider instanceof LocalVoiceProvider) localAmpBox.current = provider.syntheticAmplitude;
       provider.onState(setState);
       provider.onTranscript((entry) => {
         if (entry.role === 'user') stateSinceRef.current = Date.now(); // speech re-arms the no-speech window
@@ -133,7 +141,22 @@ export function SessionController({ settings, devMode = false }: SessionControll
       // what starts/stops sessions — nothing runs invisibly. Plain-browser dev
       // (no preload) keeps the old mount-start so the harness works without Electron.
       if (!window.mitra) {
-        provider.start({ language }).catch(() => setState('error'));
+        provider.start({ language }).catch((err: unknown) => {
+        // Mic-less machines / failed model downloads fall back to the mock
+        // brain (mock-mode rule) instead of a dead error ring.
+        if (provider instanceof LocalVoiceProvider && !disposed) {
+          const fb = new MockProvider({ getWorkspaceModes: () => modesRef.current });
+          fb.onState(setState);
+          fb.onTranscript((entry) => setEntries((prev) => [...prev.slice(-MAX_ENTRIES + 1), entry]));
+          if (audioElRef.current) fb.attachAudio(audioElRef.current);
+          mockAmpBox.current = fb.syntheticAmplitude;
+          providerRef.current = fb;
+          void fb.start({ language }).catch(() => setState('error'));
+        } else {
+          setState('error');
+        }
+        console.warn('[mitra] voice provider start failed:', err);
+      });
       }
     });
     return () => {
@@ -173,6 +196,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
         analyserRef.current ?? 0,
         mockAmpBox.current?.current ?? 0,
         bolnaAmpBox.current?.current ?? 0,
+        localAmpBox.current?.current ?? 0,
       );
     };
     raf = requestAnimationFrame(tick);

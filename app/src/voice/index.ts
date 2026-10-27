@@ -8,6 +8,8 @@ import type { VoiceProvider, WorkspaceMode } from '../shared/types';
 import type { Session as BolnaSession } from '@bolna/web-call';
 import { BolnaProvider } from './bolnaProvider';
 import { MockProvider } from './mockProvider';
+import { LocalVoiceProvider } from './localProvider';
+export { LocalVoiceProvider } from './localProvider';
 import { DEFAULT_BRIDGE_BASE } from './types';
 
 export interface CreateVoiceProviderOptions {
@@ -18,10 +20,12 @@ export interface CreateVoiceProviderOptions {
   /** Force the mock brain (tests / explicit offline dev). */
   forceMock?: boolean;
   /**
-   * Live getter for Settings.workspaceModes (mock brain only): the workspace_mode
+   * Live getter for Settings.workspaceModes (mock/local brains): the workspace_mode
    * intent matches whatever the panel currently holds, without a provider rebuild.
    */
   getWorkspaceModes?: () => WorkspaceMode[];
+  /** Live getter for Settings.voiceLanguage (local brain STT language). */
+  getVoiceLanguage?: () => string | undefined;
 }
 
 /** Structural check: the bridge forwards Bolna's mint JSON as-is when keys exist. */
@@ -35,7 +39,13 @@ function looksLikeRealSession(value: unknown): value is BolnaSession {
 export async function createVoiceProvider(opts: CreateVoiceProviderOptions): Promise<VoiceProvider> {
   const bridgeBase = opts.bridgeBase ?? DEFAULT_BRIDGE_BASE;
   const fetchImpl: typeof fetch = opts.fetchImpl ?? ((url, init) => fetch(url, init));
-  if (opts.forceMock) return new MockProvider({ bridgeBase, fetchImpl, getWorkspaceModes: opts.getWorkspaceModes });
+  // Deterministic mock for e2e (?dev=1 on the overlay) — no mic prompts, no
+  // model downloads, no network beyond the local bridge.
+  const devParam =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1';
+  if (opts.forceMock || devParam) {
+    return new MockProvider({ bridgeBase, fetchImpl, getWorkspaceModes: opts.getWorkspaceModes });
+  }
 
   try {
     const res = await fetchImpl(`${bridgeBase}/api/session`, {
@@ -53,7 +63,21 @@ export async function createVoiceProvider(opts: CreateVoiceProviderOptions): Pro
       }
     }
   } catch {
-    /* offline / bridge down → mock */
+    /* offline / bridge down → next tier */
+  }
+
+  // Tier 2 — free-forever local voice (Vosk STT + OS TTS + Ollama chat brain):
+  // needs a microphone. Without one (CI, remote sessions) or in test contexts
+  // we fall through to the deterministic mock brain.
+  const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+  if (mediaDevices?.getUserMedia) {
+    return new LocalVoiceProvider({
+      bridgeBase,
+      fetchImpl,
+      getWorkspaceModes: opts.getWorkspaceModes,
+      getLanguage: () => opts.getVoiceLanguage?.() ?? 'en-us',
+      mediaDevices,
+    });
   }
   return new MockProvider({ bridgeBase, fetchImpl, getWorkspaceModes: opts.getWorkspaceModes });
 }
