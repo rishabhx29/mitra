@@ -7,10 +7,32 @@ Why: qwen/gemma take ~1-3s to decide what to do; Laya (convaiinnovations/laya, A
 laptop-centric routing ("which tool, if any?"), leaving phrasing/args to regex and
 conversation to the big LLMs.
 
-**Runtime**: `pip install laya` (Python 3.10+), sidecar `laya-serve` exposes
-`POST /v1/systemone` on localhost (TypeSafe-Jev-compatible). The bridge **probes**
-`http://127.0.0.1:8899` (Laya's default port; configurable via LAYA_URL env) — Laya is
-an OPTIONAL tier: absent → deterministic intents → LLM chat (unchanged behavior).
+**Runtime — VERIFIED LIVE on this machine**: `pip install "laya[serve]"` (Python 3.11),
+sidecar `laya-serve --model multilingual` (322M mmBERT — the 421M English checkpoint
+OOMs alongside Ollama on 8GB) → default port **8000** (the --port flag is ignored;
+LAYA_URL default = http://127.0.0.1:8000).
+
+**EXACT working request shape** (verified: "add milk to my todo list" →
+choice=notion_add_todo conf=1.0; "open youtube aur lofi beats search karo" →
+youtube_search conf=0.9999, model=multilingual):
+
+POST /v1/systemone
+{"state":{"text":"<utterance>"},
+ "questions":{"route":{"type":"choice",
+   "instructions":"Which capability does this utterance need? Pick exactly one.",
+   "criteria":{"notion_add_todo":"add an item to their to-do list",
+     "youtube_search":"open youtube and search or play something",
+     "note_notepad":"write a note in notepad",
+     "agenda_today":"asks what is due or scheduled today",
+     "launch_app":"open an application",
+     "run_opencode_task":"opencode coding agent should build something",
+     "open_url":"open a website","set_reminder":"reminder or timer",
+     "lock_workstation":"lock the screen",
+     "workspace_mode":"workspace preset like coding or gaming",
+     "none":"general conversation, no tool"}}}}
+→ 200 {"answers":{"route":{"choice":"<tool>","confidence":<0..1>}}}
+
+Laya is an OPTIONAL tier: absent → deterministic intents → LLM chat (unchanged).
 
 **Tier order (per utterance)**: deterministic parseIntent (instant) → **Laya route**
 (~50ms) → LLM chat (qwen/gemma via /api/brain/chat) → mock fallback.
