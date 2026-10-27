@@ -181,12 +181,12 @@ describe('POST /api/brain/route — tier 2: the optional Laya sidecar', () => {
 
 describe('GET /api/brain/laya — Voice-panel badge probe', () => {
   it('sidecar answers (any status) → {available:true}', async () => {
-    const laya = fakeLaya(() => jsonResponse({}, false, 404), '127.0.0.1:8899');
+    const laya = fakeLaya(() => jsonResponse({}, false, 404), '127.0.0.1:8000');
     const h = await start({ settings: () => makeSettings(), env: {}, fetchImpl: laya });
     const res = await fetch(`http://127.0.0.1:${h.port}/api/brain/laya`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ available: true });
-    expect(laya.calls[0]?.url).toBe('http://127.0.0.1:8899/');
+    expect(laya.calls[0]?.url).toBe('http://127.0.0.1:8000/');
   });
 
   it('sidecar unreachable → {available:false}, still HTTP 200', async () => {

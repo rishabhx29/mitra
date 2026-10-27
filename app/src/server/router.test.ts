@@ -36,17 +36,17 @@ function fakeLaya(answer: (url: string, init?: Captured['init']) => Promise<Laya
 }
 
 describe('buildSystemOneRequest', () => {
-  it('carries the utterance as state.text + ONE typed choice question over the tool gates + "none"', () => {
+  it('carries the utterance as state.text + the VERIFIED live choice shape (object questions, instructions + criteria)', () => {
     const body = buildSystemOneRequest('play lofi on youtube') as {
       state: { text: string };
-      questions: Array<{ id: string; type: string; options: string[] }>;
+      questions: Record<string, { type: string; instructions: string; criteria: Record<string, string> }>;
     };
     expect(body.state.text).toBe('play lofi on youtube');
-    expect(body.questions).toHaveLength(1);
-    const q = body.questions[0];
+    // Verified live shape: questions is an OBJECT keyed by question id.
+    const q = body.questions['route_tool'];
     expect(q.type).toBe('choice');
-    expect(q.options).toEqual([...LAYA_TOOL_OPTIONS]);
-    expect(q.options.at(-1)).toBe('none');
+    expect(Object.keys(q.criteria)).toEqual([...LAYA_TOOL_OPTIONS]);
+    expect(q.criteria['none']).toContain('no tool');
   });
 });
 
@@ -58,7 +58,7 @@ describe('routeViaLaya', () => {
     const decision = await routeViaLaya('play lofi on youtube', deps(laya));
     expect(decision).toEqual({ tool: 'youtube_search', confidence: 0.92, via: 'laya' });
     expect(laya.calls).toHaveLength(1);
-    expect(laya.calls[0]?.url).toBe('http://127.0.0.1:8899/v1/systemone');
+    expect(laya.calls[0]?.url).toBe('http://127.0.0.1:8000/v1/systemone');
     expect(laya.calls[0]?.init?.method).toBe('POST');
     const body = JSON.parse(laya.calls[0]?.init?.body ?? '{}') as { state: { text: string } };
     expect(body.state.text).toBe('play lofi on youtube');

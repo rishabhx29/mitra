@@ -20,8 +20,8 @@ import {
   parseReminder,
 } from '../voice/intents';
 
-/** Laya sidecar default (plan §1: 127.0.0.1:8899, LAYA_URL env overrides). */
-export const DEFAULT_LAYA_URL = 'http://127.0.0.1:8899';
+/** Laya sidecar default (VERIFIED LIVE: laya-serve binds 8000; LAYA_URL env overrides). */
+export const DEFAULT_LAYA_URL = 'http://127.0.0.1:8000';
 /** The bridge never blocks on Laya longer than this (plan §1). */
 export const DEFAULT_LAYA_TIMEOUT_MS = 1500;
 /** Below this confidence the route is a "none" (plan §1: confidence > 0.6). */
@@ -43,8 +43,32 @@ export const LAYA_TOOL_OPTIONS: readonly string[] = [
   'reminder',
   'lock_workstation',
   'workspace_mode',
+  'open_any_app',
+  'close_app',
+  'web_search',
   'none',
 ];
+
+/**
+ * criteria (label -> description) for the verified /v1/systemone choice shape —
+ * descriptions steer the classifier; labels must equal LAYA_TOOL_OPTIONS.
+ */
+export const LAYA_TOOL_CRITERIA: Readonly<Record<string, string>> = {
+  notion_add_todo: 'user wants to add an item to their to-do list',
+  note_notepad: 'user wants a note written in notepad',
+  youtube_search: 'user wants to open youtube and search or play something',
+  agenda_today: 'user asks what is due or scheduled today',
+  launch_app: 'user wants to open an application',
+  run_opencode_task: 'user wants the opencode coding agent to build something',
+  open_url: 'user wants to open a website',
+  reminder: 'user wants a reminder or timer',
+  lock_workstation: 'user wants the screen locked',
+  workspace_mode: 'user wants a workspace preset like coding or gaming mode',
+  open_any_app: 'user wants to open any application by name',
+  close_app: 'user wants to close or quit a running application',
+  web_search: 'user wants to search the web (google) for something',
+  none: 'general conversation, no tool',
+};
 
 /** Laya choice name → ToolName ("reminder" is the plan's name for set_reminder). */
 const LAYA_CHOICE_TO_TOOL: Readonly<Record<string, ToolName>> = {
@@ -58,6 +82,9 @@ const LAYA_CHOICE_TO_TOOL: Readonly<Record<string, ToolName>> = {
   reminder: 'set_reminder',
   lock_workstation: 'lock_workstation',
   workspace_mode: 'workspace_mode',
+  open_any_app: 'open_any_app',
+  close_app: 'close_app',
+  web_search: 'web_search',
 };
 
 /** Structural subset of Response — keeps tests free of DOM/lib.dom types. */
@@ -100,16 +127,18 @@ export interface RouteDecision {
  * question whose options are the tool gates + "none".
  */
 export function buildSystemOneRequest(text: string): Record<string, unknown> {
+  // VERIFIED LIVE against laya-serve 0.4.15 (docs/DECISION_TIER_PLAN.md §1):
+  // questions is an OBJECT keyed by id; a choice question takes `instructions`
+  // + `criteria` (dict of label -> description). Array/options shapes 400/422.
   return {
     state: { text },
-    questions: [
-      {
-        id: 'route_tool',
+    questions: {
+      route_tool: {
         type: 'choice',
-        prompt: 'Which tool should handle this utterance, if any?',
-        options: [...LAYA_TOOL_OPTIONS],
+        instructions: 'Which capability does this utterance need? Pick exactly one.',
+        criteria: { ...LAYA_TOOL_CRITERIA },
       },
-    ],
+    },
   };
 }
 
@@ -137,7 +166,34 @@ function readConfidence(source: Record<string, unknown>): number {
 function parseSystemOneChoice(body: unknown): [choice: string, confidence: number] | null {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
   const obj = body as Record<string, unknown>;
-  const raw = obj['choice'] ?? obj['answer'] ?? firstElement(obj['answers']) ?? obj['result'] ?? obj['output'];
+  // VERIFIED live shape: {answers:{route_tool:{choice,confidence}}} — answers is
+  // an object keyed by question id. Keep the defensive fallbacks for older shapes.
+  const answersField = obj['answers'];
+  const fromAnswersObj =
+    answersField !== null && typeof answersField === 'object' && !Array.isArray(answersField)
+      ? (answersField as Record<string, unknown>)['route_tool']
+      : undefined;
+  const raw =
+    obj['choice'] ??
+    (fromAnswersObj !== null && typeof fromAnswersObj === 'object'
+      ? (fromAnswersObj as Record<string, unknown>)['choice']
+      : undefined) ??
+    obj['answer'] ??
+    firstElement(obj['answers']) ??
+    obj['result'] ??
+    obj['output'];
+  // confidence likewise prefers answers.route_tool.confidence
+  if (
+    fromAnswersObj !== null &&
+    typeof fromAnswersObj === 'object' &&
+    typeof (fromAnswersObj as Record<string, unknown>)['confidence'] === 'number'
+  ) {
+    const verifiedChoice =
+      typeof raw === 'string' && raw.trim() !== '' ? raw.trim().toLowerCase() : null;
+    return verifiedChoice
+      ? [verifiedChoice, (fromAnswersObj as Record<string, unknown>)['confidence'] as number]
+      : null;
+  }
   if (typeof raw === 'string') {
     const choice = raw.trim();
     return choice ? [choice, readConfidence(obj)] : null;
@@ -241,6 +297,27 @@ export function pickArgs(tool: ToolName, text: string): Record<string, unknown> 
     case 'agenda_today':
     case 'lock_workstation':
       return {};
+    case 'close_app': {
+      // Mirrors intents.CLOSE_APP_RES without the stop-forms (handled above).
+      const close = firstCapture(norm, [
+        /close\s+(?:the\s+)?(.{2,40}?)\s*(?:app|application)?\s*(?:now|please)?[.?!]?$/,
+        /quit\s+(?:the\s+)?(.{2,40}?)[.?!]?$/,
+        /band\s+karo\s+(.{2,40}?)[.?!]?$/,
+      ]);
+      return close ? { name: close } : null;
+    }
+    case 'web_search': {
+      const web = firstCapture(norm, [
+        /^google\s+(.{2,80}?)[.?!]?$/,
+        /^search\s+(?:the\s+)?web\s+for\s+(.{2,80}?)[.?!]?$/,
+      ]);
+      return web ? { query: web } : null;
+    }
+    case 'open_any_app': {
+      // Laya named open_any_app but parseLaunchAlias missed — args unknown
+      // beyond the raw utterance; hand the whole text as the app name guess.
+      return { name: norm };
+    }
     // notion_add_todo / workspace_mode / run_opencode_task / memory /
     // list_reminders / status_briefing: parseIntent owns these utterances
     // deterministically; when only Laya names them there is no safe regex →

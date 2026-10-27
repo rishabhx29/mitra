@@ -17,6 +17,8 @@ import { createLockWorkstationTool } from './lock';
 import { createMemoryTool } from './memory';
 import { createStatusBriefingTool, type OsLike, type PowerMonitorLike } from './status';
 import { createNoteNotepadTool } from './notepad';
+import { openAnyApp, closeApp, webSearch } from './genericApps';
+import { buildAppIndex, matchApp, type AppEntry } from './appIndex';
 import { createYoutubeSearchTool } from './youtube';
 import { createAgendaTodayTool } from './agenda';
 import type { MockNotionFileAdapter } from '../mockNotion';
@@ -73,6 +75,10 @@ export interface ToolDispatcherDeps {
   power?: PowerMonitorLike;
   /** node:os-shaped probe for status_briefing; defaults to the real node:os. */
   os?: OsLike;
+  /** Start-Menu dirs for the general app index (§2b); main injects the real pair. */
+  appIndexDirs?: string[];
+  /** Injectable fs for the index scan (tests); defaults to node fs wrappers. */
+  appFs?: import('./appIndex').FsLike;
   /** Absolute notes-file path for note_notepad (main injects <userData>/mitra-notes.txt). */
   notesPath?: string;
   /** File adapter for note_notepad; defaults to the real filesystem. */
@@ -89,6 +95,8 @@ interface SharedToolState {
   mockNotion: MockNotion;
   reminders: ReminderService;
   memory: MemoryStore;
+  /** §2b Start-Menu app index (lazy, once per dispatcher; refreshed on a miss). */
+  appIndex?: { entries: AppEntry[]; byKey: Map<string, AppEntry> };
 }
 
 function buildHandler(
@@ -158,6 +166,33 @@ function buildHandler(
       return createYoutubeSearchTool({ opener: deps.opener, platform, exec: deps.exec });
     case 'agenda_today':
       return createAgendaTodayTool({ board: shared.mockNotion, exec: deps.exec, platform });
+    case 'open_any_app':
+    case 'close_app':
+      return (args) => {
+        // §2b: Start-Menu index built lazily once per dispatcher (a fast shallow
+        // walk); refreshed whenever a lookup misses entirely.
+        if (!shared.appIndex) {
+          shared.appIndex = buildAppIndex(deps.appIndexDirs ?? [], deps.appFs);
+        }
+        const name = String(args?.name ?? '');
+        let index = shared.appIndex;
+        if (matchApp(index, name).length === 0) {
+          shared.appIndex = buildAppIndex(deps.appIndexDirs ?? [], deps.appFs);
+          index = shared.appIndex;
+        }
+        const execLike = deps.exec ?? (async () => ({ code: 0, stdout: '', stderr: '' }));
+        const appDeps = { index, exec: execLike, aliasNames: deps.settings().apps.map((a) => a.name) };
+        return tool === 'open_any_app' ? openAnyApp(name, appDeps) : closeApp(name, appDeps);
+      };
+    case 'web_search':
+      return async (args) =>
+        webSearch(String(args?.query ?? ''), async (url) => {
+          if (deps.opener) {
+            await deps.opener(url);
+          } else if (deps.exec) {
+            await deps.exec(`start "" "${url}"`);
+          }
+        });
   }
 }
 

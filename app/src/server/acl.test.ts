@@ -25,6 +25,9 @@ const TOOL_GATE_CASES: Array<[ToolName, PermissionGate]> = [
   ['note_notepad', 'launcher'],
   ['youtube_search', 'browser'],
   ['agenda_today', 'notion'],
+  ['open_any_app', 'launcher'],
+  ['close_app', 'launcher'],
+  ['web_search', 'browser'],
 ];
 
 const GATELESS_TOOLS: ToolName[] = ['status_briefing'];
@@ -50,6 +53,9 @@ describe('TOOL_GATES mapping (plan Task C + ULTRON_PORT rows)', () => {
         'note_notepad',
         'youtube_search',
         'agenda_today',
+        'open_any_app',
+        'close_app',
+        'web_search',
       ].sort(),
     );
   });

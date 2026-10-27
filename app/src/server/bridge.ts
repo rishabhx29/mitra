@@ -62,6 +62,8 @@ export interface BridgeDeps {
   mockNotion?: MockNotion;
   /** Offline STT model store (Vosk zips). Optional: model routes degrade when absent. */
   models?: ModelStore;
+  /** Start-Menu dirs for the §2b general app index (main injects the real pair). */
+  appIndexDirs?: string[];
   /** Shared reminder service (main injects the Electron-Notification notifier). */
   reminders?: ReminderService;
   /** Cerebro-lite memory store (main persists it to <userData>/mitra-memory.json). */
@@ -149,6 +151,7 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       power: deps.power,
       os: deps.os,
       cwd: deps.cwd,
+      appIndexDirs: deps.appIndexDirs,
       notesPath: deps.notesPath,
       onProgress: deps.onProgress,
     });

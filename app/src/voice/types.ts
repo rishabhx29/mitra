@@ -34,6 +34,10 @@ export type MockIntent =
   | { kind: 'youtube_search'; query: string }
   /** Read the to-do board and speak the count + items (also best-effort opens the OS calendar). */
   | { kind: 'agenda_today' }
+  // General app control (docs/DECISION_TIER_PLAN.md §2b): ANY installed app + web search.
+  | { kind: 'open_any_app'; name: string }
+  | { kind: 'close_app'; name: string }
+  | { kind: 'web_search'; query: string }
   | { kind: 'stop' }
   | { kind: 'language_switch'; language: 'en' | 'hi' };
 

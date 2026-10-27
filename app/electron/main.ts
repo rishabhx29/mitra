@@ -203,6 +203,10 @@ function bootstrap(): void {
       },
     }),
     power: powerMonitor,
+    appIndexDirs: [
+      join('C:\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+      join(app.getPath('home'), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+    ],
     models: createModelStore({
       dir: join(app.getPath('userData'), 'models'),
       log: (message) => console.log(`[mitra:models] ${message}`),

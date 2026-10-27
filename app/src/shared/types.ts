@@ -20,7 +20,11 @@ export type ToolName =
   // gracefully when its service is absent (mock mode is first-class).
   | 'note_notepad'
   | 'youtube_search'
-  | 'agenda_today';
+  | 'agenda_today'
+  // General app control (docs/DECISION_TIER_PLAN.md §2b): ANY installed app + web search.
+  | 'open_any_app'
+  | 'close_app'
+  | 'web_search';
 
 export interface ToolRequest {
   id: string;

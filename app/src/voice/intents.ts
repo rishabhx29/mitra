@@ -210,6 +210,7 @@ const YOUTUBE_INTENT_RES: RegExp[] = YOUTUBE_ARG_RES.slice(0, YOUTUBE_ARG_RES.le
 // 13) agenda_today — full-utterance matches only (no args). en + Hinglish +
 //     Devanagari, per docs/DECISION_TIER_PLAN.md §2.
 export const AGENDA_RES: RegExp[] = [
+
   /^what(?:'s| is|s)?\s+due\s+today$/,
   /^what\s+do\s+i\s+have\s+to\s+do\s+today$/,
   /^(?:is\s+there\s+)?anything\s+(?:on\s+(?:my\s+)?calendar|due)\s+today$/,
@@ -220,6 +221,20 @@ export const AGENDA_RES: RegExp[] = [
   /^आज\s+क्या\s+करना\s+है$/,
   /^आज\s+मुझे\s+क्या\s+करना\s+है$/,
   /^(?:मेरा\s+)?आज\s+का\s+(?:स्केड्यूल|काम)(?:\s+बताओ)?$/,
+];
+
+// §2b general app control + web search (en / hi / Hinglish).
+export const CLOSE_APP_RES: RegExp[] = [
+  /close\s+(?:the\s+)?(.{2,40}?)\s*(?:app|application)?\s*(?:now|please)?[.?!]?$/,
+  /quit\s+(?:the\s+)?(.{2,40}?)[.?!]?$/,
+  /band\s+karo\s+(.{2,40}?)[.?!]?$/,
+  /(.{2,40}?)\s+band\s+karo[.?!]?$/,
+];
+export const WEB_SEARCH_RES: RegExp[] = [
+  /^google\s+(.{2,80}?)[.?!]?$/,
+  /^search\s+(?:the\s+)?web\s+for\s+(.{2,80}?)[.?!]?$/,
+  /^web(?:par|pe)?\s+(.{2,80}?)\s+dhundo[.?!]?$/,
+  /^web\s+search\s+(.{2,80}?)[.?!]?$/,
 ];
 
 /** URL-shaped token extraction (exported for the bridge router's pickArgs). */
@@ -368,8 +383,20 @@ export function parseIntent(raw: string, modes: WorkspaceMode[] = []): MockInten
     if (mode) return { kind: 'workspace_mode', mode: mode.name };
   }
 
+  // §2b: web search before open_url ("google X" is not a domain).
+  const web = firstCapture(text, WEB_SEARCH_RES);
+  if (web) return { kind: 'web_search', query: web };
+
   const app = parseLaunchAlias(text);
   if (app) return { kind: 'launch_app', alias: app };
+
+  // §2b: close after launch (the mirror verb; "close X" must not be eaten by
+  // the open-parse) — and it must not shadow "band karo" stop forms, which the
+  // STOP_RE already handled above.
+  const closeName = firstCapture(text, CLOSE_APP_RES);
+  if (closeName && !/^(?:it|that|this|the app|mitra)$/i.test(closeName)) {
+    return { kind: 'close_app', name: closeName };
+  }
 
   return null;
 }
@@ -383,6 +410,12 @@ export function intentToTool(
       return { tool: 'notion_add_todo', args: { text: intent.text } };
     case 'launch_app':
       return { tool: 'launch_app', args: { alias: intent.alias } };
+    case 'open_any_app':
+      return { tool: 'open_any_app', args: { name: intent.name } };
+    case 'close_app':
+      return { tool: 'close_app', args: { name: intent.name } };
+    case 'web_search':
+      return { tool: 'web_search', args: { query: intent.query } };
     case 'opencode_task':
       return { tool: 'run_opencode_task', args: { prompt: intent.prompt } };
     case 'open_url':
