@@ -1,42 +1,22 @@
-// GLSL sources for the Mitra orb.
+// GLSL sources for the Mitra wave orb — "wave ribbons in a glass sphere"
+// (docs/DECISION_TIER_PLAN.md §3).
 //
-// adapted from samantha-ui (MIT) — src/components/SoulOrb/{vertexShader,fragmentShader}.glsl.
-// The vertex shader embeds the Ashima/Ian McEwan 3D simplex noise
+// adapted from samantha-ui (MIT) — src/components/SoulOrb/{vertexShader,fragmentShader}.glsl:
+// the shell/core shaders keep the reference's fresnel + palette-mix framing,
+// and the core keeps the reference's blob/liquid-silk displacement. The vertex
+// shader embeds the Ashima/Ian McEwan 3D simplex noise
 // (Copyright (C) 2011 Ashima Arts, MIT — https://github.com/ashima/webgl-noise),
 // exactly as in the samantha-ui source.
 //
-// Differences from the reference, per the Mitra persona contract:
-// - `uAmplitude` → `uAudio` (0..1 audio amplitude)
-// - `uColorPrimary`/`uColorSecondary` → `uColorA`/`uColorB` (user-customizable)
-// - added `uState` (0 idle, 1 listening, 2 thinking, 3 speaking, 4 error) which
-//   drives a high-frequency surface jitter in the error state.
-// - UI-polish wave (docs/DESIGN_BRIEF.md §Overlay "Orb shape"): dual-frequency
-//   simplex — a slow low-frequency swell is layered under the detail noise for
-//   a softer, more organic blob; plus the inner additive-glow core shaders
-//   (ORB_CORE_*) drawn over the shell so the orb appears lit from within.
+// The old single-sphere look is replaced outright (plan §3) by:
+// - ORB_SHELL_*: transparent glass sphere with a strong fresnel rim (additive).
+// - ORB_CORE_*: noise-displaced gradient blob, vertical a→b gradient, audio
+//   breathing; still morphs to the reference's liquid silk while speaking.
+// - ORB_RIBBON_*: closed wavy tube strands (geometry built once in Orb.tsx —
+//   no per-frame geometry rebuilds; displacement bends the static tube).
 
-/** uState index mapping — keep in sync with orbTheme. */
-export const ORB_STATE_UNIFORM_INDEX = {
-  idle: 0,
-  listening: 1,
-  thinking: 2,
-  speaking: 3,
-  error: 4,
-} as const;
-
-export const ORB_VERTEX_SHADER = /* glsl */ `
-uniform float uTime;
-uniform float uAudio;
-uniform float uState;          // 0 idle, 1 listening, 2 thinking, 3 speaking, 4 error
-uniform float uNoiseFrequency;
-uniform float uNoiseAmplitude;
-uniform float uShapeMorph;     // 0.0 = Blob, 1.0 = Liquid Silk
-
-varying vec3 vNormal;
-varying vec3 vPosition;
-varying float vPattern;
-varying vec3 vViewPosition;
-
+/** The Ashima/Ian McEwan simplex noise, verbatim from the samantha-ui source. */
+export const SIMPLEX_NOISE_GLSL = /* glsl */ `
 //
 // Description : Array and textureless GLSL 2D/3D/4D simplex
 //               noise functions.
@@ -82,11 +62,12 @@ float snoise(vec3 v)
 
   //   x0 = x0 - 0.0 + 0.0 * C.xxx;
   //   x1 = x0 - i1  + 1.0 * C.xxx;
-  //   x2 = x0 - i2  + 2.0 * C.xxx;
-  //   x3 = x0 - 1.0 + 3.0 * C.xxx;
+  //   x2 = x0 - i2 + C.yyy; // 2.0*C.x = 1/3 = C.y
+  //   x3 = x0 - 1.0 + 3.0*C.xxx; // -1.0+3.0*C.x = -0.5 = -D.y
+
   vec3 x1 = x0 - i1 + C.xxx;
-  vec3 x2 = x0 - i2 + C.yyy; // 2.0*C.x = 1/3 = C.y
-  vec3 x3 = x0 - D.yyy;      // -1.0+3.0*C.x = -0.5 = -D.y
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
 
 // Permutations
   i = mod289(i);
@@ -125,7 +106,7 @@ float snoise(vec3 v)
   vec3 p3 = vec3(a1.zw,h.w);
 
 //Normalise gradients
-  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
   p0 *= norm.x;
   p1 *= norm.y;
   p2 *= norm.z;
@@ -137,97 +118,15 @@ float snoise(vec3 v)
   return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
                                 dot(p2,x2), dot(p3,x3) ) );
   }
-
-void main() {
-  vNormal = normalMatrix * normal;
-  vViewPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
-
-  // Pattern for fragment shader
-  float noise = snoise(position * uNoiseFrequency + uTime * 0.2);
-
-  // Dual-frequency surface (design brief): a slow, low-frequency swell layered
-  // under the detail noise — large soft lobes that drift far slower than the
-  // detail noise, making the blob read organic instead of fizzy.
-  float lowFreq = snoise(position * 0.35 + uTime * 0.06);
-
-  // Keep the color-mix pattern within [-1, 1] after blending the two octaves.
-  vPattern = clamp(noise * 0.8 + lowFreq * 0.2, -1.0, 1.0);
-
-  // --- 1. BLOB LOGIC (idle/listening/thinking/error) ---
-  float baseDisplacement = noise * uNoiseAmplitude + lowFreq * uNoiseAmplitude * 0.55;
-
-  float speechNoise1 = snoise(position * 3.0 + uTime * 6.0);
-  float speechNoise2 = snoise(position * 1.5 + uTime * 4.0);
-  float speechNoise3 = snoise(position * 5.0 + uTime * 8.0);
-  float speechNoise4 = snoise(position * 0.8 + uTime * 2.0);
-
-  float blobAudioDisplacement = uAudio * 1.1 * (
-    speechNoise1 * 0.35 +
-    speechNoise2 * 0.25 +
-    speechNoise3 * 0.15 +
-    speechNoise4 * 0.25
-  );
-
-  float totalBlobDisplacement = baseDisplacement + blobAudioDisplacement;
-
-  // --- 2. LIQUID SILK LOGIC (speaking) ---
-  // Domain warping for fluid look
-  vec3 warp = position + vec3(sin(uTime), cos(uTime), 0.0) * 0.5;
-  float flow = snoise(warp * 1.5);
-  float ripples = sin(position.y * 10.0 + uTime * 5.0 + flow * 2.0);
-
-  // High-pass filter on the flow to get the "tips" or outward edges
-  float tips = smoothstep(0.0, 0.8, flow);
-
-  // The low-frequency swell rides the silk shape too (slow breathing under the flow).
-  float silkDisplacement =
-    (flow * 0.1) + (lowFreq * 0.05) + (uAudio * tips * 0.3) + (uAudio * ripples * 0.02);
-
-  // --- 3. BLEND ---
-  float finalDisplacement = mix(totalBlobDisplacement, silkDisplacement, uShapeMorph);
-
-  // Error state: high-frequency nervous jitter on top of everything else.
-  float errorJitter = step(3.5, uState) * 0.02 * sin(position.x * 41.0 + position.y * 33.0 + uTime * 34.0);
-
-  vec3 newPosition = position + normal * (finalDisplacement + errorJitter);
-
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
-}
 `;
 
-export const ORB_FRAGMENT_SHADER = /* glsl */ `
-uniform vec3 uColorA;
-uniform vec3 uColorB;
-uniform float uEmissiveIntensity;
-uniform float uFresnelPower;
+// ---------------------------------------------------------------------------
+// Glass shell — transparent sphere, strong fresnel rim (the reference image's
+// blue ring), additive. The center stays almost clear (faint glass body) so
+// the core + ribbons read as floating inside a bubble.
+// ---------------------------------------------------------------------------
 
-varying vec3 vNormal;
-varying vec3 vViewPosition;
-varying float vPattern;
-
-void main() {
-  vec3 normal = normalize(vNormal);
-  vec3 viewDir = normalize(-vViewPosition);
-
-  // Fresnel
-  float fresnel = pow(1.0 - abs(dot(viewDir, normal)), uFresnelPower);
-
-  // Mix colors
-  vec3 color = mix(uColorA, uColorB, vPattern * 0.5 + 0.5);
-  color = mix(color, uColorB, fresnel);
-
-  // Emissive glow centered on fresnel/pattern
-  vec3 emissive = uColorB * uEmissiveIntensity * (fresnel + vPattern * 0.2);
-
-  gl_FragColor = vec4(color + emissive, 1.0);
-}
-`;
-
-// Inner additive-glow core (design brief §Overlay "Orb shape"): a ~0.5-scale
-// sphere drawn OVER the opaque shell (depthTest off + AdditiveBlending) so it
-// reads as a soft light from within the orb. No noise — facing-ratio falloff
-// only, brightest dead-center (an inner heart, not another rim).
-export const ORB_CORE_VERTEX_SHADER = /* glsl */ `
+export const ORB_SHELL_VERTEX_SHADER = /* glsl */ `
 varying vec3 vNormal;
 varying vec3 vViewPosition;
 
@@ -238,12 +137,12 @@ void main() {
 }
 `;
 
-export const ORB_CORE_FRAGMENT_SHADER = /* glsl */ `
+export const ORB_SHELL_FRAGMENT_SHADER = /* glsl */ `
 uniform vec3 uColorA;
 uniform vec3 uColorB;
-uniform float uCoreIntensity; // 0..1 per-state base brightness (orbTheme.coreGlow)
-uniform float uAudio;         // smoothed 0..1 amplitude
-uniform float uTime;          // frozen under prefers-reduced-motion (static glow)
+uniform float uRim;       // rim brightness (wave theme shellRim * brightness)
+uniform float uRimPower;  // fresnel power (orbTheme.fresnelPower)
+uniform float uAudio;     // smoothed 0..1 amplitude
 
 varying vec3 vNormal;
 varying vec3 vViewPosition;
@@ -252,13 +151,142 @@ void main() {
   vec3 normal = normalize(vNormal);
   vec3 viewDir = normalize(-vViewPosition);
 
-  // Facing ratio: 1 at the sphere's center, 0 at the silhouette → soft radial falloff.
-  float facing = pow(max(dot(viewDir, normal), 0.0), 1.6);
+  float fresnel = pow(1.0 - abs(dot(viewDir, normal)), uRimPower);
+  vec3 rim = mix(uColorA, uColorB, fresnel);
 
-  // Gentle heartbeat + a modest audio lift (scaled 0..~1.5, clamped below).
-  float beat = 0.85 + 0.15 * sin(uTime * 1.8) + uAudio * 0.5;
+  // Additive: rgb * alpha is what gets added — the rim ring is bright, the
+  // flat-on faces add only a faint glass body so the sphere still reads.
+  float alpha = clamp(fresnel * uRim * (1.0 + uAudio * 0.5) + 0.05, 0.0, 1.0);
+  gl_FragColor = vec4(rim, alpha);
+}
+`;
 
-  vec3 coreColor = mix(uColorA, uColorB, 0.65);
-  gl_FragColor = vec4(coreColor, clamp(uCoreIntensity * facing * beat, 0.0, 1.0));
+// ---------------------------------------------------------------------------
+// Gradient core — noise-displaced blob with a vertical a→b gradient. The
+// displacement (dual-frequency blob + audio pump + liquid-silk morph while
+// speaking) is carried over from the samantha-ui reference, so every
+// orbTheme.OrbStateTheme surface field stays live on the new look.
+// ---------------------------------------------------------------------------
+
+export const ORB_CORE_VERTEX_SHADER = /* glsl */ `
+uniform float uTime;
+uniform float uAudio;
+uniform float uNoiseFrequency;
+uniform float uNoiseAmplitude;
+uniform float uShapeMorph;     // 0.0 = blob, 1.0 = liquid silk (speaking)
+
+varying vec3 vNormal;
+varying vec3 vViewPosition;
+varying float vLocalY;         // vertical gradient coordinate (~-1.2..1.2)
+varying float vPattern;
+
+${SIMPLEX_NOISE_GLSL}
+
+void main() {
+  vNormal = normalMatrix * normal;
+
+  float noise = snoise(position * uNoiseFrequency + uTime * 0.2);
+
+  // Dual-frequency surface (design brief): a slow, low-frequency swell layered
+  // under the detail noise — soft organic lobes, carried over from the old orb.
+  float lowFreq = snoise(position * 0.35 + uTime * 0.06);
+  vPattern = clamp(noise * 0.8 + lowFreq * 0.2, -1.0, 1.0);
+
+  // --- 1. BLOB LOGIC (idle/listening/thinking/error) ---
+  float baseDisplacement = noise * uNoiseAmplitude + lowFreq * uNoiseAmplitude * 0.55;
+  // Audio pumps the core (speaking): two octaves of travelling noise. The
+  // gain is tuned so even full-scale amplitude stays inside the shell.
+  float audioNoise1 = snoise(position * 3.0 + uTime * 6.0);
+  float audioNoise2 = snoise(position * 1.5 + uTime * 4.0);
+  float blobAudioDisplacement = uAudio * 0.3 * (audioNoise1 * 0.6 + audioNoise2 * 0.4);
+  float totalBlobDisplacement = baseDisplacement + blobAudioDisplacement;
+
+  // --- 2. LIQUID SILK LOGIC (speaking) — from the samantha-ui reference ---
+  vec3 warp = position + vec3(sin(uTime), cos(uTime), 0.0) * 0.5;
+  float flow = snoise(warp * 1.5);
+  float ripples = sin(position.y * 10.0 + uTime * 5.0 + flow * 2.0);
+  float tips = smoothstep(0.0, 0.8, flow);
+  float silkDisplacement =
+    (flow * 0.1) + (lowFreq * 0.05) + (uAudio * tips * 0.3) + (uAudio * ripples * 0.02);
+
+  float finalDisplacement = mix(totalBlobDisplacement, silkDisplacement, uShapeMorph);
+
+  vec3 newPosition = position + normal * finalDisplacement;
+  vLocalY = clamp(newPosition.y, -1.2, 1.2);
+  vViewPosition = (modelViewMatrix * vec4(newPosition, 1.0)).xyz;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+}
+`;
+
+export const ORB_CORE_FRAGMENT_SHADER = /* glsl */ `
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform float uEmissiveIntensity;
+
+varying vec3 vNormal;
+varying vec3 vViewPosition;
+varying float vLocalY;
+varying float vPattern;
+
+void main() {
+  vec3 normal = normalize(vNormal);
+  vec3 viewDir = normalize(-vViewPosition);
+  float fresnel = pow(1.0 - abs(dot(viewDir, normal)), 2.0);
+
+  // Vertical gradient: uColorA at the bottom → uColorB at the top (plan §3).
+  float g = clamp(vLocalY * 0.5 + 0.5, 0.0, 1.0);
+  vec3 color = mix(uColorA, uColorB, g);
+  color = mix(color, uColorB, fresnel * 0.4); // silhouette leans toward B
+  color *= 0.9 + 0.15 * vPattern;             // subtle noise shading
+
+  vec3 emissive = uColorB * uEmissiveIntensity * (0.5 + 0.5 * g + fresnel * 0.5);
+  gl_FragColor = vec4(color + emissive, 1.0);
+}
+`;
+
+// ---------------------------------------------------------------------------
+// Ribbons — closed wavy tubes. The geometry is STATIC (TubeGeometry built once
+// from ribbonCurvePoint samples); this vertex shader bends it along the tube
+// normal with a position-based travelling wave (seam-safe on closed tubes),
+// so animation is uniforms-only. Audio amplitude wobbles the strands.
+// ---------------------------------------------------------------------------
+
+export const ORB_RIBBON_VERTEX_SHADER = /* glsl */ `
+uniform float uTime;
+uniform float uAudio;       // smoothed 0..1 amplitude
+uniform float uWobble;      // ambient travelling-wave amplitude (wave theme)
+uniform float uAudioWobble; // audio-driven displacement gain (wave theme)
+uniform float uAmbient;     // 1 normally, 0 under prefers-reduced-motion
+
+varying float vWave;
+varying vec3 vNormal;
+varying vec3 vViewPosition;
+
+void main() {
+  // Position-based (not t-based) wave: identical on both sides of the tube
+  // seam, and free of any per-frame geometry work.
+  float wave = sin(position.x * 4.0 + position.y * 3.0 + uTime * 2.4);
+  float displacement = wave * (uWobble * uAmbient + uAudio * uAudioWobble);
+  vec3 newPosition = position + normal * displacement;
+
+  vWave = wave;
+  vNormal = normalMatrix * normal;
+  vViewPosition = (modelViewMatrix * vec4(newPosition, 1.0)).xyz;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+}
+`;
+
+export const ORB_RIBBON_FRAGMENT_SHADER = /* glsl */ `
+uniform vec3 uColor;
+uniform float uIntensity;
+uniform float uAudio;
+
+varying float vWave;
+
+void main() {
+  // Additive: a gentle shimmer rides the travelling wave; audio brightens.
+  float shimmer = 0.8 + 0.2 * vWave;
+  float alpha = clamp(uIntensity * shimmer * (1.0 + uAudio * 0.6), 0.0, 1.0);
+  gl_FragColor = vec4(uColor, alpha);
 }
 `;

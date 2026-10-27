@@ -29,6 +29,8 @@ export default function VoicePanel({
   const [status, setStatus] = useState<ModelState | null>(null);
   const [busy, setBusy] = useState(false);
   const [testSpoken, setTestSpoken] = useState(false);
+  // Optional Laya decision tier (docs/DECISION_TIER_PLAN.md §1): one badge line.
+  const [layaAvailable, setLayaAvailable] = useState<boolean | null>(null);
   const selected = findVoiceLanguage(settings.voiceLanguage);
 
   const refresh = useCallback(async () => {
@@ -43,6 +45,21 @@ export default function VoicePanel({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${BRIDGE_BASE}/api/brain/laya`, { signal: AbortSignal.timeout(1500) })
+      .then((res) => (res.ok ? (res.json() as Promise<{ available?: boolean }>) : null))
+      .then((body) => {
+        if (alive) setLayaAvailable(body?.available === true);
+      })
+      .catch(() => {
+        if (alive) setLayaAvailable(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const download = async () => {
     setBusy(true);
@@ -111,6 +128,9 @@ export default function VoicePanel({
 
           <div className="flex flex-wrap items-center gap-2">
             {stateBadge()}
+            <Badge tone={layaAvailable ? 'accent' : 'muted'}>
+              {tt(layaAvailable ? 'settings.voice.layaOn' : 'settings.voice.layaOff')}
+            </Badge>
             <span className="text-[11px] text-zinc-500">
               {status?.state === 'ready'
                 ? `${Math.round(status.bytes / 1e6)}MB · ${tt('settings.voice.onDevice')}`
