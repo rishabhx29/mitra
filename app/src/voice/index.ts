@@ -83,7 +83,15 @@ export async function createVoiceProvider(opts: CreateVoiceProviderOptions): Pro
 }
 
 export { BolnaProvider, type BolnaProviderDeps } from './bolnaProvider';
-export { MockProvider, parseIntent, intentToTool, failureReply, type MockProviderDeps } from './mockProvider';
+export {
+  MockProvider,
+  parseIntent,
+  intentToTool,
+  failureReply,
+  fetchRouteDecision,
+  ROUTE_TIMEOUT_MS,
+  type MockProviderDeps,
+} from './mockProvider';
 export {
   DEFAULT_BRIDGE_BASE,
   type BolnaVoiceProviderExtras,

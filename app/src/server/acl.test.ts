@@ -19,6 +19,12 @@ const TOOL_GATE_CASES: Array<[ToolName, PermissionGate]> = [
   ['list_reminders', 'launcher'],
   ['lock_workstation', 'launcher'],
   ['memory', 'notion'],
+  // Real-world tools (docs/DECISION_TIER_PLAN.md §2): notepad opens a local
+  // app → launcher; youtube opens a URL → browser; agenda reads the board →
+  // notion.
+  ['note_notepad', 'launcher'],
+  ['youtube_search', 'browser'],
+  ['agenda_today', 'notion'],
 ];
 
 const GATELESS_TOOLS: ToolName[] = ['status_briefing'];
@@ -41,6 +47,9 @@ describe('TOOL_GATES mapping (plan Task C + ULTRON_PORT rows)', () => {
         'lock_workstation',
         'memory',
         'status_briefing',
+        'note_notepad',
+        'youtube_search',
+        'agenda_today',
       ].sort(),
     );
   });
@@ -123,5 +132,11 @@ describe('shipped defaults (DEFAULT_SETTINGS.permissions)', () => {
 
   it('status_briefing is always allowed out of the box', () => {
     expect(checkPermission('status_briefing', DEFAULT_SETTINGS.permissions).allowed).toBe(true);
+  });
+
+  it('real-world tools follow their gates out of the box (launcher/browser on, notion on)', () => {
+    for (const tool of ['note_notepad', 'youtube_search', 'agenda_today'] as ToolName[]) {
+      expect(checkPermission(tool, DEFAULT_SETTINGS.permissions).allowed).toBe(true);
+    }
   });
 });

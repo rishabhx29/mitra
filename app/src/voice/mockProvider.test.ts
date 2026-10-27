@@ -147,6 +147,116 @@ describe('parseIntent — unknown input', () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseIntent — real-world tools (docs/DECISION_TIER_PLAN.md §2)
+// ---------------------------------------------------------------------------
+
+describe('parseIntent — note_notepad', () => {
+  it('en table: "note this: X", "note that X", "add X to my notepad", "X in notepad", bare "note X"', () => {
+    expect(parseIntent('note this: buy milk')).toEqual({ kind: 'note_notepad', text: 'buy milk' });
+    expect(parseIntent('note that the wifi password is 1234')).toEqual({
+      kind: 'note_notepad',
+      text: 'the wifi password is 1234',
+    });
+    expect(parseIntent('add buy milk to my notepad')).toEqual({ kind: 'note_notepad', text: 'buy milk' });
+    expect(parseIntent('buy milk in notepad')).toEqual({ kind: 'note_notepad', text: 'buy milk' });
+    expect(parseIntent('note buy milk')).toEqual({ kind: 'note_notepad', text: 'buy milk' });
+  });
+
+  it('hinglish table: "notepad me X add karo" / "X notepad me likho" / "notepad X likho"', () => {
+    expect(parseIntent('notepad me call mom add karo')).toEqual({ kind: 'note_notepad', text: 'call mom' });
+    expect(parseIntent('call mom notepad me likho')).toEqual({ kind: 'note_notepad', text: 'call mom' });
+    expect(parseIntent('notepad call mom likho')).toEqual({ kind: 'note_notepad', text: 'call mom' });
+  });
+
+  it('Devanagari table: "नोट करो X" / "X नोट करो" / "नोटपैड में X लिखो"', () => {
+    expect(parseIntent('नोट करो दूध लेना है')).toEqual({ kind: 'note_notepad', text: 'दूध लेना है' });
+    expect(parseIntent('दूध लेना है नोट करो')).toEqual({ kind: 'note_notepad', text: 'दूध लेना है' });
+    expect(parseIntent('नोटपैड में दूध लिखो')).toEqual({ kind: 'note_notepad', text: 'दूध' });
+  });
+
+  it('add-todo to a LIST still wins its own shape (no cross-steal)', () => {
+    expect(parseIntent('add milk to my list')).toEqual({ kind: 'add_todo', text: 'milk' });
+    expect(parseIntent('milk add karo')).toEqual({ kind: 'add_todo', text: 'milk' });
+  });
+});
+
+describe('parseIntent — youtube_search', () => {
+  it('en table: "open youtube and search X" / "search X on youtube" / "play X on youtube"', () => {
+    expect(parseIntent('open youtube and search lofi beats')).toEqual({
+      kind: 'youtube_search',
+      query: 'lofi beats',
+    });
+    expect(parseIntent('open youtube and play despacito')).toEqual({
+      kind: 'youtube_search',
+      query: 'despacito',
+    });
+    expect(parseIntent('search cat videos on youtube')).toEqual({
+      kind: 'youtube_search',
+      query: 'cat videos',
+    });
+    expect(parseIntent('find quantum computing on youtube.')).toEqual({
+      kind: 'youtube_search',
+      query: 'quantum computing',
+    });
+    expect(parseIntent('play despacito on youtube')).toEqual({
+      kind: 'youtube_search',
+      query: 'despacito',
+    });
+  });
+
+  it('hinglish + Devanagari table: "youtube par X search karo" / "youtube pe X chalao" / "X youtube par search karo"', () => {
+    expect(parseIntent('youtube par cricket highlights search karo')).toEqual({
+      kind: 'youtube_search',
+      query: 'cricket highlights',
+    });
+    expect(parseIntent('youtube pe old songs chalao')).toEqual({
+      kind: 'youtube_search',
+      query: 'old songs',
+    });
+    expect(parseIntent('cricket highlights youtube par search karo')).toEqual({
+      kind: 'youtube_search',
+      query: 'cricket highlights',
+    });
+    expect(parseIntent('यूट्यूब पर ड्रम कवर चलाओ')).toEqual({
+      kind: 'youtube_search',
+      query: 'ड्रम कवर',
+    });
+  });
+
+  it('bare "search X" and bare "open youtube" stay OUT of the deterministic tier', () => {
+    // Bare search → null here; the bridge route tier (Laya) may name
+    // youtube_search, and pickArgs' bare-search shape extracts the query.
+    expect(parseIntent('search quantum computing')).toBeNull();
+    expect(parseIntent('open youtube')).toEqual({ kind: 'launch_app', alias: 'youtube' });
+  });
+});
+
+describe('parseIntent — agenda_today', () => {
+  it('en table: "what(s) due today" / "what do I have to do today" / "anything on my calendar today"', () => {
+    expect(parseIntent("what's due today")).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('whats due today?')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('what is due today')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('what do I have to do today')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('anything on my calendar today')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('is there anything due today')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent("what's on my calendar today")).toEqual({ kind: 'agenda_today' });
+  });
+
+  it('hinglish + Devanagari table: "aaj kya karna hai" / "aaj ka schedule batao" / "आज क्या करना है"', () => {
+    expect(parseIntent('aaj kya karna hai')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('aaj ka schedule batao')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('mera aaj ka schedule')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('आज मुझे क्या करना है')).toEqual({ kind: 'agenda_today' });
+    expect(parseIntent('आज का स्केड्यूल बताओ')).toEqual({ kind: 'agenda_today' });
+  });
+
+  it('near-miss questions stay non-agenda (memory keeps its own shapes)', () => {
+    expect(parseIntent("what's the weather today")).toBeNull();
+    expect(parseIntent('what do you remember')).toEqual({ kind: 'memory_recall_all' });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // parseIntent — Ultron-port intents (rows 1,2,4,5,6): workspace_mode,
 // set_reminder, lock_workstation, status_briefing, memory
 // ---------------------------------------------------------------------------
@@ -438,6 +548,15 @@ describe('intentToTool — Ultron-port mappings', () => {
       tool: 'memory',
       args: { action: 'recall', text: 'chai' },
     });
+    expect(intentToTool({ kind: 'note_notepad', text: 'buy milk' })).toEqual({
+      tool: 'note_notepad',
+      args: { text: 'buy milk' },
+    });
+    expect(intentToTool({ kind: 'youtube_search', query: 'lofi beats' })).toEqual({
+      tool: 'youtube_search',
+      args: { query: 'lofi beats' },
+    });
+    expect(intentToTool({ kind: 'agenda_today' })).toEqual({ tool: 'agenda_today', args: {} });
   });
 });
 
@@ -572,13 +691,16 @@ describe('MockProvider flow', () => {
     expect(agent[agent.length - 1]?.text).toBe(t('hi', 'voice.bridgeUnreachable'));
   });
 
-  it('unknown input → clarification, no fetch', async () => {
+  it('unknown input → the route tier is tried, then clarification (never throws)', async () => {
     const { provider, calls, transcripts } = makeProvider(async () => {
       throw new Error('must not be called');
     });
     await provider.start({ language: 'en' });
     await provider.submitText("what's the weather today");
-    expect(calls).toHaveLength(0);
+    // The decision tier (docs/DECISION_TIER_PLAN.md §1) POSTs /api/brain/route
+    // once; the bridge being down degrades to the pre-existing clarify.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/brain/route');
     const agent = transcripts.filter((e) => e.role === 'agent');
     expect(agent[agent.length - 1]?.text).toBe(t('en', 'voice.clarify'));
   });
@@ -652,12 +774,15 @@ describe('MockProvider flow — Ultron-port tools', () => {
     await provider.start({ language: 'en' });
 
     await provider.submitText('movie time'); // no modes configured yet
-    expect(calls).toHaveLength(0);
+    // No deterministic hit → the decision tier (POST /api/brain/route) is
+    // attempted once; this fake's body carries no tool, so no tool POST.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/brain/route');
 
     modes = MODE_FIXTURE; // the Modes panel just saved
     await provider.submitText('movie time');
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/tools/workspace_mode');
+    expect(calls).toHaveLength(2); // deterministic hit → straight to the tool, no route call
+    expect(calls[1]?.url).toBe('http://127.0.0.1:8765/api/tools/workspace_mode');
   });
 
   it('memory remember/recall → POSTs the memory tool with row-5 action args', async () => {
@@ -743,6 +868,123 @@ describe('MockProvider flow — Ultron-port tools', () => {
     );
     await provider.start({ language: 'en' });
     await provider.submitText('coding mode chalu karo');
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe(t('en', 'voice.denied.launcher'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MockProvider flow — real-world tools (docs/DECISION_TIER_PLAN.md §2):
+// deterministic intents hit their bridge tools with extracted args.
+// ---------------------------------------------------------------------------
+
+describe('MockProvider flow — real-world tools', () => {
+  it('note_notepad intent → POSTs {text} and speaks the tool summary', async () => {
+    const { provider, calls, transcripts } = makeProvider(async () =>
+      jsonResponse({ id: 'test-id', ok: true, summary: 'Note saved to mitra-notes.txt and opened in Notepad' }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('note this: buy milk');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/tools/note_notepad');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'note_notepad',
+      args: { text: 'buy milk' },
+    });
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe('Note saved to mitra-notes.txt and opened in Notepad');
+  });
+
+  it('youtube_search intent → POSTs the URL-encoded-later query', async () => {
+    const { provider, calls } = makeProvider(async () =>
+      jsonResponse({ id: 'test-id', ok: true, summary: 'Searching YouTube for "lofi beats"' }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('play lofi beats on youtube');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'youtube_search',
+      args: { query: 'lofi beats' },
+    });
+  });
+
+  it('agenda_today intent → POSTs empty args and speaks the board summary', async () => {
+    const { provider, calls, transcripts } = makeProvider(async () =>
+      jsonResponse({ id: 'test-id', ok: true, summary: 'You have 2 items on your board: "buy milk", "call the dentist"' }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('aaj kya karna hai');
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/tools/agenda_today');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({
+      id: 'test-id',
+      tool: 'agenda_today',
+      args: {},
+    });
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe('You have 2 items on your board: "buy milk", "call the dentist"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MockProvider flow — decision tier (docs/DECISION_TIER_PLAN.md §1): when the
+// deterministic parser misses, the provider asks POST /api/brain/route once
+// (1.5s cap) and runs a returned tool; any failure degrades to clarify.
+// ---------------------------------------------------------------------------
+
+/** fetchImpl that answers by URL suffix (route vs tools) and records calls. */
+function routedFetch(routes: Record<string, unknown>): typeof fetch {
+  return (async (url: unknown, init?: { method?: string; body?: string }) => {
+    const target = String(url);
+    for (const [suffix, body] of Object.entries(routes)) {
+      if (target.endsWith(suffix)) return jsonResponse(body);
+    }
+    throw new Error(`unexpected fetch: ${target}`);
+  }) as unknown as typeof fetch;
+}
+
+describe('MockProvider flow — decision tier (bridge route)', () => {
+  it('no intent + bridge routes to a tool → runs it and speaks the summary', async () => {
+    const { provider, calls, transcripts } = makeProvider(
+      routedFetch({
+        '/api/brain/route': { tool: 'youtube_search', args: { query: 'lofi beats' }, confidence: 0.9, via: 'laya' },
+        '/api/tools/youtube_search': { id: 'x', ok: true, summary: 'Searching YouTube for "lofi beats"' },
+      }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('search lofi beats');
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.url).toBe('http://127.0.0.1:8765/api/brain/route');
+    expect(JSON.parse(calls[0]?.init?.body ?? '{}')).toEqual({ text: 'search lofi beats' });
+    expect(calls[1]?.url).toBe('http://127.0.0.1:8765/api/tools/youtube_search');
+    expect(JSON.parse(calls[1]?.init?.body ?? '{}')).toMatchObject({
+      tool: 'youtube_search',
+      args: { query: 'lofi beats' },
+    });
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe('Searching YouTube for "lofi beats"');
+  });
+
+  it('no intent + route says via:"none" → clarification (chat owns the rest server-side)', async () => {
+    const { provider, calls, transcripts } = makeProvider(
+      routedFetch({ '/api/brain/route': { confidence: 0, via: 'none' } }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('tell me a joke yaar');
+    expect(calls).toHaveLength(1); // the route call only — no tool POST
+    const agent = transcripts.filter((e) => e.role === 'agent');
+    expect(agent[agent.length - 1]?.text).toBe(t('en', 'voice.clarify'));
+  });
+
+  it('routed tool denial (403 carrying a ToolResult) → localized apology', async () => {
+    const { provider, transcripts } = makeProvider(
+      routedFetch({
+        '/api/brain/route': { tool: 'note_notepad', args: { text: 'x' }, confidence: 0.9, via: 'laya' },
+        '/api/tools/note_notepad': { id: 'x', ok: false, summary: 'Permission denied: launcher' },
+      }),
+    );
+    await provider.start({ language: 'en' });
+    await provider.submitText('jot down something random');
     const agent = transcripts.filter((e) => e.role === 'agent');
     expect(agent[agent.length - 1]?.text).toBe(t('en', 'voice.denied.launcher'));
   });

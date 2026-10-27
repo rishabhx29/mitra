@@ -8,7 +8,7 @@
 // MockProvider — speechSynthesis audio is not exposed to WebAudio analysers).
 import type { TranscriptEntry, SessionState, VoiceProvider, WorkspaceMode } from '../shared/types';
 import { findVoiceLanguage } from '../shared/voiceLanguages';
-import { parseIntent, intentToTool, failureReply } from './mockProvider';
+import { parseIntent, intentToTool, failureReply, fetchRouteDecision, ROUTE_TIMEOUT_MS } from './mockProvider';
 import { t, type Lang } from '../i18n';
 
 /** Vosk surface this provider consumes (vosk-browser 0.0.8: Model.KaldiRecognizer). */
@@ -261,7 +261,17 @@ export class LocalVoiceProvider implements VoiceProvider {
     if (mapped) {
       reply = await this.runTool(mapped.tool, mapped.args);
     } else {
-      reply = await this.chat(raw);
+      // Decision tier (docs/DECISION_TIER_PLAN.md §1): deterministic parser
+      // missed → the bridge route (server-side parseIntent + optional Laya)
+      // before spending 1-3s on the chat LLM. Failure degrades to chat.
+      const routed = await fetchRouteDecision({
+        bridgeBase: this.d.bridgeBase,
+        fetchImpl: this.d.fetchImpl,
+        text: raw,
+        timeoutMs: ROUTE_TIMEOUT_MS,
+      });
+      if (this.disposed) return;
+      reply = routed ? await this.runTool(routed.tool, routed.args) : await this.chat(raw);
     }
     await this.speak(reply);
   }

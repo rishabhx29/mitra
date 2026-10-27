@@ -16,6 +16,10 @@ import { createSetReminderTool, createListRemindersTool, createReminderService, 
 import { createLockWorkstationTool } from './lock';
 import { createMemoryTool } from './memory';
 import { createStatusBriefingTool, type OsLike, type PowerMonitorLike } from './status';
+import { createNoteNotepadTool } from './notepad';
+import { createYoutubeSearchTool } from './youtube';
+import { createAgendaTodayTool } from './agenda';
+import type { MockNotionFileAdapter } from '../mockNotion';
 
 export type ToolOutcome = { ok: boolean; summary: string; data?: unknown };
 export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolOutcome>;
@@ -31,6 +35,10 @@ export const KNOWN_TOOLS: readonly ToolName[] = [
   'lock_workstation',
   'memory',
   'status_briefing',
+  // Real-world task tools (docs/DECISION_TIER_PLAN.md §2).
+  'note_notepad',
+  'youtube_search',
+  'agenda_today',
 ];
 
 export function isKnownTool(name: string): name is ToolName {
@@ -65,6 +73,10 @@ export interface ToolDispatcherDeps {
   power?: PowerMonitorLike;
   /** node:os-shaped probe for status_briefing; defaults to the real node:os. */
   os?: OsLike;
+  /** Absolute notes-file path for note_notepad (main injects <userData>/mitra-notes.txt). */
+  notesPath?: string;
+  /** File adapter for note_notepad; defaults to the real filesystem. */
+  notesFs?: MockNotionFileAdapter;
 }
 
 /** Default notifier when the host injects none: honest console line, never a crash. */
@@ -132,6 +144,20 @@ function buildHandler(
         memoryCount: async () => (await shared.memory.list()).length,
         notionItemCount: async () => (await shared.mockNotion.list()).length,
       });
+    // Real-world task tools (docs/DECISION_TIER_PLAN.md §2). Each degrades
+    // gracefully: notepad refuses honestly without a notesPath; youtube uses
+    // the shared opener; agenda reads the shared mock board.
+    case 'note_notepad':
+      return createNoteNotepadTool({
+        notesPath: deps.notesPath ?? '',
+        fs: deps.notesFs,
+        exec: deps.exec,
+        platform,
+      });
+    case 'youtube_search':
+      return createYoutubeSearchTool({ opener: deps.opener, platform, exec: deps.exec });
+    case 'agenda_today':
+      return createAgendaTodayTool({ board: shared.mockNotion, exec: deps.exec, platform });
   }
 }
 

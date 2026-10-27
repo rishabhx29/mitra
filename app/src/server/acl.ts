@@ -28,6 +28,13 @@ export const TOOL_GATES: Readonly<Record<ToolName, ToolGate>> = {
   memory: 'notion',
   // Ultron port row 6: status briefing is read-only + local → no gate.
   status_briefing: 'none',
+  // Real-world task tools (docs/DECISION_TIER_PLAN.md §2): writing a local
+  // notes file + opening Notepad acts like launching an app → launcher;
+  // youtube_search opens a URL → browser; agenda_today reads the to-do
+  // board → notion (same gate as the tool that writes it).
+  note_notepad: 'launcher',
+  youtube_search: 'browser',
+  agenda_today: 'notion',
 };
 
 export interface PermissionDecision {

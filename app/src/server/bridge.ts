@@ -24,6 +24,15 @@ import {
 import type { ReminderService } from './tools/reminder';
 import type { OsLike, PowerMonitorLike } from './tools/status';
 import type { FetchLike } from './tools/notion';
+import {
+  DEFAULT_LAYA_TIMEOUT_MS,
+  DEFAULT_LAYA_URL,
+  pickArgs,
+  routeViaLaya,
+  type LayaFetchLike,
+  type RouteDecision,
+} from './router';
+import { intentToTool, parseIntent } from '../voice/intents';
 
 export const DEFAULT_BRIDGE_HOST = '127.0.0.1';
 export const DEFAULT_BRIDGE_PORT = 8765;
@@ -65,6 +74,14 @@ export interface BridgeDeps {
   cwd?: string;
   /** How long GET /api/brain/status caches its pickBrain probe (tests shrink it). */
   brainStatusTtlMs?: number;
+  /** Laya sidecar base URL (docs/DECISION_TIER_PLAN.md §1). Defaults to env LAYA_URL, then 127.0.0.1:8899. */
+  layaUrl?: string;
+  /** POST /api/brain/route Laya timeout — the bridge never blocks > 1.5s (plan §1). */
+  routeTimeoutMs?: number;
+  /** GET /api/brain/laya sidecar probe timeout (Voice-panel badge). */
+  layaProbeTimeoutMs?: number;
+  /** Absolute notes file for note_notepad (main injects <userData>/mitra-notes.txt). */
+  notesPath?: string;
   onProgress?: (tool: ToolName, msg: string) => void;
   log?: (msg: string) => void;
 }
@@ -110,6 +127,12 @@ export function createBridgeApp(deps: BridgeDeps): Express {
   const settings = deps.settings ?? (() => DEFAULT_SETTINGS);
   const env = deps.env ?? process.env;
   const fetchImpl: FetchLike = deps.fetchImpl ?? ((url, init) => fetch(url, init));
+  // Decision-tier fetch: same injected fetchImpl, widened with AbortSignal so
+  // routeViaLaya / the laya probe can never hang the bridge (plan §1).
+  const layaFetch: LayaFetchLike = fetchImpl;
+  const layaUrl = (deps.layaUrl ?? (env['LAYA_URL']?.trim() || DEFAULT_LAYA_URL)).replace(/\/+$/, '');
+  const routeTimeoutMs = deps.routeTimeoutMs ?? DEFAULT_LAYA_TIMEOUT_MS;
+  const layaProbeTimeoutMs = deps.layaProbeTimeoutMs ?? 1000;
   // Shared board (Task E: GET /api/notion/items reads the same store the notion tool
   // writes). In-memory fallback when the host passes no board — hoisted so items
   // persist across requests within this process instead of resetting per dispatch.
@@ -126,6 +149,7 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       power: deps.power,
       os: deps.os,
       cwd: deps.cwd,
+      notesPath: deps.notesPath,
       onProgress: deps.onProgress,
     });
   const log = deps.log ?? (() => {});
@@ -217,6 +241,60 @@ export function createBridgeApp(deps: BridgeDeps): Express {
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true, service: 'mitra-bridge', mock: bolnaKeys(env) === null });
+  });
+
+  // ---- fast decision tier (docs/DECISION_TIER_PLAN.md §1) ----
+  // POST /api/brain/route {text} → {tool?, args?, confidence, via}:
+  //   tier 1  deterministic parseIntent (instant, args via intentToTool) → via:'deterministic'
+  //   tier 2  the OPTIONAL laya-serve sidecar names the tool (~50ms; absent /
+  //           404 / timeout / garbage → via:'none') and pickArgs parameterizes
+  //           it; no args extractable → via:'none' (Laya routes, regexes
+  //           parameterize — fall through to chat).
+  // Never throws: every failure degrades to {confidence:0, via:'none'}.
+  app.post('/api/brain/route', async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as { text?: unknown };
+    const text = typeof body.text === 'string' ? body.text : '';
+    const fail: RouteDecision = { confidence: 0, via: 'none' };
+    if (!text.trim()) {
+      res.json(fail);
+      return;
+    }
+    try {
+      const intent = parseIntent(text, settings().workspaceModes ?? []);
+      const mapped = intent ? intentToTool(intent) : null;
+      if (mapped) {
+        res.json({ tool: mapped.tool, args: mapped.args, confidence: 1, via: 'deterministic' });
+        return;
+      }
+      const decision = await routeViaLaya(text, { fetchImpl: layaFetch, layaUrl, timeoutMs: routeTimeoutMs });
+      if (!decision.tool) {
+        res.json({ confidence: decision.confidence, via: 'none' });
+        return;
+      }
+      const args = pickArgs(decision.tool, text);
+      if (!args) {
+        // Laya named an args-requiring tool but no regex extracted args → chat.
+        res.json({ confidence: decision.confidence, via: 'none' });
+        return;
+      }
+      res.json({ tool: decision.tool, args, confidence: decision.confidence, via: 'laya' });
+    } catch (err) {
+      // routeViaLaya/parseIntent never throw — defense in depth for the route edge.
+      log(`brain route failed: ${err instanceof Error ? err.message : String(err)}`);
+      res.json(fail);
+    }
+  });
+
+  // Voice-panel badge probe: is the optional Laya sidecar reachable? Any HTTP
+  // response (even a 404 on /) proves something is listening; 1s cap so the
+  // panel never hangs on it. Never throws.
+  app.get('/api/brain/laya', async (_req: Request, res: Response) => {
+    try {
+      await layaFetch(`${layaUrl}/`, { signal: AbortSignal.timeout(layaProbeTimeoutMs) });
+      res.json({ available: true });
+    } catch {
+      res.json({ available: false });
+    }
   });
 
   // Task E (Settings UI): the mock to-do board read endpoint — returns the same

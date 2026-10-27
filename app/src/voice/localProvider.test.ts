@@ -68,13 +68,43 @@ describe('LocalVoiceProvider.submitText', () => {
     expect(entries[0]).toBe('user:add milk to my todo list');
   });
 
-  it('falls back to the brain chat route when no intent matches', async () => {
+  it('falls back to the brain chat route when no intent matches (decision tier tried FIRST)', async () => {
     const { fetchImpl, calls } = bridgeFake(undefined, 'Because pointers, that is why.');
     const tts = fakeTts();
     const p = new LocalVoiceProvider({ fetchImpl, tts, fastTimers: true, getLanguage: () => 'en-us' });
     await p.submitText('why is the sky blue');
-    expect(calls.some((c) => c.url.endsWith('/api/brain/chat'))).toBe(true);
+    // docs/DECISION_TIER_PLAN.md §1: POST /api/brain/route runs before the chat
+    // LLM; this fake 404s it (old bridge / absent sidecar) so chat still answers.
+    expect(calls.some((c) => c.url.endsWith('/api/brain/route'))).toBe(true);
+    const routeIdx = calls.findIndex((c) => c.url.endsWith('/api/brain/route'));
+    const chatIdx = calls.findIndex((c) => c.url.endsWith('/api/brain/chat'));
+    expect(routeIdx).toBeGreaterThanOrEqual(0);
+    expect(chatIdx).toBeGreaterThan(routeIdx);
     expect(tts.spoken.at(-1)).toBe('Because pointers, that is why.');
+  });
+
+  it('decision tier: no intent + bridge routes to a tool → runs it instead of chat', async () => {
+    const calls: Array<{ url: string; body?: unknown }> = [];
+    const fetchImpl = (async (url: string, init?: { body?: string }) => {
+      calls.push({ url, body: init?.body ? JSON.parse(init.body) : undefined });
+      if (url.endsWith('/api/brain/route')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ tool: 'youtube_search', args: { query: 'cat videos' }, confidence: 0.9, via: 'laya' }),
+        } as unknown as Response;
+      }
+      if (url.includes('/api/tools/')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, summary: 'Searching YouTube for "cat videos"' }) } as unknown as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const tts = fakeTts();
+    const p = new LocalVoiceProvider({ fetchImpl, tts, fastTimers: true, getLanguage: () => 'en-us' });
+    await p.submitText('search cat videos');
+    expect(calls.some((c) => c.url.endsWith('/api/tools/youtube_search'))).toBe(true);
+    expect(calls.some((c) => c.url.endsWith('/api/brain/chat'))).toBe(false);
+    expect(tts.spoken.at(-1)).toBe('Searching YouTube for "cat videos"');
   });
 
   it('speaks the localized refusal when the tool is permission-denied', async () => {

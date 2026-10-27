@@ -27,6 +27,13 @@ export type MockIntent =
   | { kind: 'memory_remember'; text: string }
   | { kind: 'memory_recall_all' }
   | { kind: 'memory_recall'; query: string }
+  // Real-world task tools (docs/DECISION_TIER_PLAN.md §2).
+  /** Append a timestamped line to <userData>/mitra-notes.txt (+ open Notepad on win32). */
+  | { kind: 'note_notepad'; text: string }
+  /** Open youtube.com/results?search_query=<query> via the browser opener. */
+  | { kind: 'youtube_search'; query: string }
+  /** Read the to-do board and speak the count + items (also best-effort opens the OS calendar). */
+  | { kind: 'agenda_today' }
   | { kind: 'stop' }
   | { kind: 'language_switch'; language: 'en' | 'hi' };
 

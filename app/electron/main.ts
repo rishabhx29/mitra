@@ -208,6 +208,9 @@ function bootstrap(): void {
       log: (message) => console.log(`[mitra:models] ${message}`),
     }),
     os,
+    // note_notepad (docs/DECISION_TIER_PLAN.md §2): timestamped notes live in
+    // userData next to the memory store, so they survive restarts.
+    notesPath: join(app.getPath('userData'), 'mitra-notes.txt'),
     log: (message) => console.log(`[mitra:bridge] ${message}`),
     onProgress: (tool, message) => {
       const event: SessionEvent = {
