@@ -1,76 +1,44 @@
-# Mitra — Context Handoff (2026-10-25)
+# Mitra — Context Handoff v2 (2026-10-25, after local-voice stack)
 
-Read this fully before doing anything. Working dir: `C:\Rishabh\Bolna hackathon` (Windows, Git Bash). App lives in `app/`. Also read: `AGENTS.md` (rules + glossary), `GLOSSARY.md`, `docs/superpowers/plans/2026-10-24-mitra-mvp.md`.
+Supersedes the previous CONTEXT.md content: the local voice stack described there as "in-flight" is now **DONE and committed** (`1d3d7fc`). Read this fully. Working dir: `C:\Rishabh\Bolna hackathon` (Windows, Git Bash). App in `app/`. Also read: `AGENTS.md`, `GLOSSARY.md`.
 
 ## Project
 
-**Mitra** — cross-platform desktop voice AI assistant for the **Bolna Buildathon (submission deadline Oct 31, 2026)**. Electron 39 + electron-vite + React 19 + Tailwind v4 + three/R3F. TypeScript strict. Git repo, no remote yet. All commits by "Mitra Team".
+**Mitra** — desktop voice AI assistant for the **Bolna Buildathon (deadline Oct 31, 2026)**. Electron 39 + electron-vite + React 19 + Tailwind v4 + three/R3F, TypeScript strict, version 0.2.0.
 
-Feature set (shipped, green): hotkey voice overlay (Ctrl+Shift+Space, en/hi/Hinglish mock brain, permission-ACL tools, status pill, 12s/30s inactivity timeouts), AGI-style Console window (chat + tool cards, boot sequence), local Ollama brain tier for chat (auto-detect localhost:11434, prefers qwen2.5:3b → gemma2:2b, mock fallback), Ultron-port features (workspace modes, reminders, lockdown, memory, status briefing), orb + VRM avatar personas (4 bundled samples, fullscreen orbit viewer, upload persists), redesigned settings (Home landing, glass panels, en+hi i18n).
+**Voice brain tiers (final architecture):**
+1. **Bolna** (when `app/.env` has BOLNA_API_KEY/BOLNA_AGENT_ID) — live voice via `@bolna/web-call` (SDK v3.0.1 has NO transcript events — known limitation).
+2. **Local voice (free forever, offline, NEW)** — Vosk STT via `vosk-browser` WASM (14 languages, small-model zips downloaded once into `<userData>/models/`, served to the renderer by the bridge `/api/models/file/:lang`), TTS via OS `speechSynthesis`, conversation via `/api/brain/chat` (Ollama tier-1 → deterministic mock). Selected automatically when no Bolna keys AND a microphone exists. Mic-less machines auto-fall-back to mock on start failure.
+3. **Mock** (always available; forced when `?dev=1` on the overlay URL = e2e, or `forceMock`).
 
-Verification: `cd app && npm run typecheck && npm run build && npx vitest run` (last green: **527 tests / 29 files**) and `MITRA_E2E=1 npx playwright test` (**8/8** as of the avatar-thumbnail commit; one intermittent flake being fixed, see below). ALWAYS kill port-8765 squatters before e2e: `netstat -ano | grep :8765` → `taskkill //F //PID <pid>`.
+Tool execution is intent-driven in ALL tiers (shared `parseIntent`/`intentToTool` from mockProvider: en/hi/Hinglish; tools = notion, launcher, opencode, url, workspace modes, reminder, lock, memory, status — all behind the ACL).
 
-## Current state
+Verification: `cd app && npm run typecheck && npm run build && npx vitest run` → **538 tests / 31 files green**; `MITRA_E2E=1 npx playwright test` → **8/8 green**. Always free port 8765 first (`netstat -ano | grep :8765` → `taskkill //F //PID <pid>`).
 
-`git log --oneline` head ≈ `feat(persona): live avatar thumbnail…`. Working tree has **uncommitted work-in-progress: the local voice stack** (user asked for free-forever offline multilingual voice instead of Bolna-for-now). DO NOT discard it.
+## Just completed (commits `1d3d7fc` + earlier)
 
-### In-flight: LocalVoiceProvider stack (user's latest request)
+- Local voice stack: `src/shared/voiceLanguages.ts` (14 langs: en-us/en-in/hi/gu/te/es/fr/de/it/pt/ru/ja/ko/cn), `src/server/models.ts` (download store, atomic, injected fs/fetch), bridge routes `/api/models/{status,status/:lang,download,file/:lang}`, `src/voice/localProvider.ts` (Vosk + OS TTS + intent/chat pipeline; typed text + recognized speech take the same path), mic/dev guards in `src/voice/index.ts` factory, mic-fallback in SessionController, `src/settings/VoicePanel.tsx` (language select, download+status, test voice) registered as the "Voice" section, i18n en+hi, tests (models 6, localProvider 5).
+- Ollama installed (winget) and **qwen2.5:3b pulled**; gemma2:2b pull started in background (`/tmp/ollama-gemma.log`). Verify: `ollama list`. The app auto-detects Ollama for chat (Console status bar shows the model).
+- Earlier: first-launch-visible fix, avatar thumbnail + auto-sample, console Enter fix, Ultron port, e2e 8/8.
 
-Goal: STT via **Vosk small models** (WASM `vosk-browser`, model zips downloaded on demand into userData/models, served to the renderer by the bridge over http://127.0.0.1:8765), TTS via **OS speechSynthesis**, conversation via existing `/api/brain/chat` (Ollama→mock). Free forever, offline, 14 languages (en-us, en-in, hi, gu, te, es, fr, de, it, pt, ru, ja, ko, cn).
+## Remaining work (all human-facing or optional polish)
 
-Files already written (uncommitted):
-- `app/src/shared/voiceLanguages.ts` — curated language map (id/label/native/ttsLang/modelUrl/approxMb) + `findVoiceLanguage`
-- `app/src/server/models.ts` — ModelStore (ensure/status/read, injected fs+fetch, atomic .part→rename, never throws)
-- `app/src/server/bridge.ts` — PATCHED with routes: GET `/api/models/status`, GET `/api/models/status/:lang`, POST `/api/models/download` {lang} (awaits ensure), GET `/api/models/file/:lang` (serves zip). Deps field `models?: ModelStore` added (params coerced with String() for Express 5 types)
-- `app/src/shared/types.ts` — `Settings.voiceLanguage?: string` added
-- `app/electron/store.ts` — schema + sanitize mapping for voiceLanguage added
-- `app/src/voice/localProvider.ts` — LocalVoiceProvider (mic → ScriptProcessor 16k → vosk acceptWaveform → result → submitText pipeline reusing parseIntent/intentToTool/failureReply from mockProvider; tools via bridge; no-intent → /api/brain/chat; speak() via injected tts (OS speechSynthesis impl) with envelope + hard cap; syntheticAmplitude for orb)
+1. **User**: Bolna keys → `app/.env` (then voice auto-upgrades to tier 1; local voice remains default fallback).
+2. **User**: GUI pass — `cd app && npm run dev`. Try: Voice panel (download Hindi model ~40MB, Test voice), overlay with real mic (Hindi/Hinglish), Console from Home.
+3. **Optional**: rebuild exe after any further change (`cd app && npm run dist`, ~116MB portable → `dist/Mitra-0.2.0-portable-x64.exe`). The exe rebuilt BEFORE the local-voice commit does NOT include it — **rebuild needed** (a background `npm run dist` was started at the time of writing; check `app/dist/` timestamps vs last commit).
+4. **User**: demo video per `docs/DEMO_SCRIPT.md` (add a Voice-panel + local-voice line), GitHub push (no remote yet), **submit by Oct 31**.
 
-**KNOWN ISSUE — exactly one typecheck error remains**: `src/voice/localProvider.ts:161` — `this.recognizer.on?.('result', ...)` — the local `recognizer` field is typed as `{ terminate?(): void }` (narrowed after assignment) so `.on` doesn't exist and `e` is implicit any. Fix: widen the field type to the full recognizer shape from the `createRecognizer` dep type (e.g. store it as `Awaited<ReturnType<NonNullable<LocalProviderDeps['createRecognizer']>>>` or define an exported `VoskRecognizerLike` interface and use it for the field + cast at assignment).
+## Gotchas (learned the hard way — keep following these)
 
-### Remaining steps for this feature (in order)
+- e2e MUST see `?dev=1` (main adds it to the overlay when MITRA_E2E=1) → factory forces Mock. Without a rebuild after source changes, e2e tests a STALE app.
+- Free port 8765 before e2e; orphaned bridges cause false failures.
+- `npm` from workflow/CDP scripts: use `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js`.
+- Electron navigates on stray file drops unless a window-level dragover/drop guard exists (settings/fullscreen/console have it — add to any new window).
+- Explicit Enter handling in inputs (disabled submit button kills implicit submission).
+- Avatar upload `accept=".vrm"` only; Bolna endpoint is `/web-call/freeswitch-session`.
+- `vosk-browser` 0.0.8 API: `createModel(url)` → `new model.KaldiRecognizer(16000)` → `acceptWaveformFloat(Float32Array, sampleRate)` + `on('result')`; model terminates on session stop.
+- Vosk model zips: official mirror alphacephei.com/vosk/models (Apache-2.0); Indian langs available small: hi, gu, te (+ en-in).
 
-1. Fix the typecheck error above → full gates green.
-2. Provider selection: extend `app/src/voice/index.ts` `createVoiceProvider`: if `forceMock` (e2e) or no `navigator.mediaDevices` → Mock; else if BOLNA keys (existing /api/session probe returns real session) → Bolna; else → **LocalVoiceProvider** (it self-downloads its model in start()). Pass `getLanguage: () => settings.voiceLanguage` — note SessionController currently builds providers with `{ language }`; extend `CreateVoiceProviderOptions` with `getVoiceLanguage?: () => string` and wire from SessionController (it has settings).
-3. SessionController (`app/src/overlay/SessionController.tsx`): amplitude wiring — add `else if (provider instanceof LocalVoiceProvider) localAmpBox.current = provider.syntheticAmplitude` next to the Mock/Bolna instances (lines ~119), and include it in the 60fps merge `Math.max(...)` (lines ~100). Provider import from `../voice`.
-4. `app/electron/main.ts`: add to startBridge deps: `models: createModelStore({ dir: join(app.getPath('userData'), 'models'), log: (m) => console.log('[mitra:models] ' + m) })` (import from `../src/server/models`). Optionally forward download completion via onProgress → sendToSettings.
-5. Settings UI: new `app/src/settings/VoicePanel.tsx` — language `<select>` from VOICE_LANGUAGES (label + native + ~MB), status badge (poll `/api/models/status/:lang`), Download button (POST `/api/models/download`), "Test voice" button (uses window.speechSynthesis directly with findVoiceLanguage(settings.voiceLanguage).ttsLang), provider-mode line. Register in `src/settings/App.tsx` SECTIONS + sidebar, i18n keys en+hi (`src/i18n/{en,hi}.ts`). Saves via existing `save({ voiceLanguage })`.
-6. Unit tests: `src/server/models.test.ts` (ensure→download→ready with fake fs/fetch; failure→error; read returns bytes; unknown lang), `localProvider.test.ts` (submitText: intent→tool call via fake fetch; chat fallback; speak fallback timing with fake tts + fastTimers; stop() disposes), language-map sanity (unique ids, https urls).
-7. e2e: overlay path must stay Mock (MITRA_E2E=1 already forces it via forceMock — verify the factory still honors it). Optionally extend smoke test 2 to open the Voice panel and see the select.
-8. Gates + e2e → thematic commits (suggested: `feat(voice): free-forever local voice — vosk STT (14 langs, on-demand models) + OS TTS + Ollama chat brain` then `feat(settings): Voice panel…`).
-9. Rebuild exe: `cd app && npm run dist` (~116MB portable, `dist/Mitra-0.2.0-portable-x64.exe`).
+## Map (unchanged from v1 except voice)
 
-### Also in-flight (background)
-
-- **Ollama install** via winget was kicked off in background (`exec_d47d80c7`); after it completes run: `"C:\Users\akash\AppData\Local\Programs\Ollama\ollama.exe" pull qwen2.5:3b` and `pull gemma2:2b` (user explicitly wants Gemma + a fast task model). Verify with `curl http://127.0.0.1:11434/api/tags`. The app auto-detects it (brain tier 1).
-- **e2e flake (test 6)**: after the thumbnail change, "terminal permission off" test intermittently dead-ends with the caption stuck on the greeting — the typed input lands before the re-summoned provider is live. `expectProviderReady()` guard was added to the spec (uncommitted) but the run still flaked once; suspected MockProvider `this.chain` wedge (serialized submitText queue behind a never-settling run — speak/envelope are time-bounded, runTool fetch has NO timeout; consider adding AbortSignal.timeout(8000) to the mock provider's tool fetch). Investigate only if it recurs.
-
-## User's standing instructions
-
-- Work **solo** (no subagents) — user switched to this after slow agent waves.
-- Commit **thematically and often** (`feat(scope): …`); never one big commit. Git identity is configured repo-local.
-- Mock mode is first-class: everything works with zero keys/offline.
-- Bolna keys will be added later in `app/.env` (BOLNA_API_KEY/BOLNA_AGENT_ID) — when present the app should prefer Bolna for voice (selection order above). The user still needs to: GUI pass, record demo video (docs/DEMO_SCRIPT.md), push to GitHub (no remote yet), submit by **Oct 31**.
-- When `.env` appears: verify live voice (boot dev, bridge `/api/health` should stop reporting mock:true — actually health mock flag tracks Bolna keys for session minting).
-
-## Architecture quick map
-
-- `app/electron/` — main process: windows (overlay 220×220 transparent always-on-top, settings, fullscreen avatar, console), hotkey, tray, IPC (settings zod store, avatar copy, e2e hooks `mitra:e2e-*` gated by MITRA_E2E=1), bridge startup on 127.0.0.1:8765.
-- `app/src/server/` — express bridge: /api/session (Bolna mint, mock-safe), /api/tools/:name (ACL dispatcher; tools: notion, launcher, opencode, url, workspace, reminder, lock, memory, status), /api/brain/{status,chat} (Ollama→mock), /api/models/* (new), /api/notion/items. Everything injectable for vitest.
-- `app/src/voice/` — VoiceProvider implementations: mockProvider (deterministic brain + parseIntent/intentToTool exports), bolnaProvider (@bolna/web-call; SDK v3.0.1 has NO transcript events — known limitation), localProvider (new).
-- `app/src/overlay/` — summon circle UI (PersonaStage + status pill + dev input `?dev=1` under MITRA_E2E).
-- `app/src/console/` — chat window (consoleModel reducer + Thread/ToolCard/BootSequence).
-- `app/src/persona/` — Orb (samantha-ui-derived shaders) + Avatar (three-vrm + wawa-lipsync) behind PersonaStage.
-- `app/src/settings/` — panels (Home, Persona, Permissions, Apps, Modes, Notion, Memory, Hotkey, Language, Transcript, FullscreenAvatarView) + mitraClient (window.mitra with local fallback).
-- Bundled VRM avatars: `app/assets/avatars/` (Seed-san + 3 VRoid samples; ATTRIBUTION.md; served via allowlisted setAvatarFile IPC).
-- Research/decisions: `research/00-05`, `docs/ULTRON_PORT.md`, `docs/CONSOLE_PLAN.md`, `docs/DESIGN_BRIEF.md`, `docs/DEMO_SCRIPT.md`.
-
-## Gotchas learned the hard way
-
-- `world.run('npm')` in workflows: ENOENT on Windows — use `node C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js`.
-- Electron drops → window NAVIGATES to the file unless a window-level dragover/drop preventDefault guard exists (settings + fullscreen + console have it; keep it in new windows).
-- Chromium implicit form submission requires a non-disabled submit button — always add explicit onKeyDown Enter handling (console input does this).
-- Packaged app boots: settings window must be shown on first launch (fixed) or double-click looks dead.
-- e2e needs port 8765 free; CDP-injected files have no File path (getPathForFile returns '') — not a product bug.
-- Avatar upload `accept=".vrm"` ONLY (the MIME token grays files out in Windows dialogs).
-- Bolna session endpoint is `/web-call/freeswitch-session` (per SDK d.ts), not `/web-call/session`.
+`app/electron/` windows+hotkey+tray+IPC+bridge-start · `app/src/server/` bridge (session/tools/brain/models/notion) · `app/src/voice/` providers (mock/bolna/local + index factory) · `app/src/overlay/` · `app/src/console/` · `app/src/persona/` · `app/src/settings/` (11 panels) · `app/assets/avatars/` (4 samples + ATTRIBUTION.md) · docs: ULTRON_PORT, CONSOLE_PLAN, DESIGN_BRIEF, DEMO_SCRIPT, plans/2026-10-24-mitra-mvp.
