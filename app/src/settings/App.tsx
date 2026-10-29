@@ -132,23 +132,26 @@ export default function SettingsApp() {
   const panelProps = { settings, tt, save };
 
   return (
-    <div className="mitra-shell flex h-full w-full text-zinc-100" style={orbVars}>
+    <div className="mitra-shell relative flex h-full w-full text-zinc-100" style={orbVars}>
       {/* Sidebar */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-white/[0.06] bg-white/[0.02] backdrop-blur-xl">
-        <div className="flex items-center gap-3 px-5 py-5">
+      <aside className="nebula-rail z-10 flex w-60 shrink-0 flex-col">
+        <div className="flex items-center gap-3 px-5 pb-4 pt-5">
           <span
-            className="h-7 w-7 rounded-full"
+            className="orb-pulse h-8 w-8 rounded-full"
             style={{
               background: `radial-gradient(circle at 32% 28%, ${settings.orbColors.a}, ${settings.orbColors.b} 75%)`,
-              boxShadow: `0 0 14px ${settings.orbColors.b}80`,
+              boxShadow: `0 0 18px ${settings.orbColors.b}90, 0 0 42px ${settings.orbColors.a}40`,
             }}
           />
           <div>
-            <div className="text-sm font-semibold text-zinc-50">{tt('app.title')}</div>
-            <div className="text-[11px] text-zinc-500">{tt('settings.title')}</div>
+            <div className="text-sm font-semibold tracking-wide text-white">{tt('app.title')}</div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+              {tt('settings.title')}
+            </div>
           </div>
         </div>
-        <nav className="stagger flex-1 space-y-1 px-3" aria-label={tt('settings.title')}>
+        <div className="nebula-brand-line mx-5 mb-4" aria-hidden="true" />
+        <nav className="stagger flex-1 space-y-1.5 px-3" aria-label={tt('settings.title')}>
           {SECTIONS.map(({ id, labelKey, icon }) => {
             const active = section === id;
             return (
@@ -156,18 +159,22 @@ export default function SettingsApp() {
                 key={id}
                 onClick={() => setSection(id)}
                 aria-current={active ? 'page' : undefined}
-                className={`focus-orb relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                  active ? 'bg-white/[0.06] text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'
+                data-active={active}
+                className={`nebula-nav-item focus-orb relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm ${
+                  active ? 'font-medium text-white' : 'text-zinc-400'
                 }`}
               >
-                {/* Orb-gradient indicator on the active item (brief §"Accent system"). */}
                 {active && (
                   <span
                     aria-hidden="true"
-                    className="orb-gradient absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
+                    className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full"
+                    style={{
+                      background: 'linear-gradient(180deg, var(--orb-a), var(--orb-b))',
+                      boxShadow: '0 0 10px color-mix(in oklab, var(--orb-a) 60%, transparent)',
+                    }}
                   />
                 )}
-                <span style={active ? { color: 'var(--orb-a)' } : undefined}>
+                <span style={active ? { color: 'var(--orb-a)', filter: 'drop-shadow(0 0 6px color-mix(in oklab, var(--orb-a) 55%, transparent))' } : undefined}>
                   <Icon name={icon} />
                 </span>
                 {tt(labelKey)}
@@ -183,7 +190,7 @@ export default function SettingsApp() {
       </aside>
 
       {/* Content */}
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      <main className="z-10 min-w-0 flex-1 overflow-y-auto">
         <div className={`mx-auto px-8 py-8 ${section === 'home' ? 'max-w-3xl' : 'max-w-2xl'}`}>
           {section !== 'home' && (
             <h2 className="mb-6 text-lg font-semibold text-zinc-50">
