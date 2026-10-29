@@ -42,6 +42,8 @@ export interface PersonaStageProps {
   bloom?: boolean;
   /** Avatar viewer mode: user-orbitable camera for large windows (default false). */
   orbit?: boolean;
+  /** close = head-and-shoulders (overlay); full = entire model (console). */
+  framing?: 'close' | 'full';
   className?: string;
 }
 
@@ -60,6 +62,7 @@ export function PersonaStage({
   licenseVisible = true,
   bloom = true,
   orbit = false,
+  framing = 'close',
   className,
 }: PersonaStageProps) {
   // Hooks run unconditionally (rules of hooks): analyse whatever source is
@@ -81,6 +84,7 @@ export function PersonaStage({
         audioEl={audioEl}
         licenseVisible={licenseVisible}
         orbit={orbit}
+        framing={framing}
         className={className}
       />
     );

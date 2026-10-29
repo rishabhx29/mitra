@@ -114,7 +114,7 @@ function buildHandler(
         fetchImpl: deps.fetchImpl,
       });
     case 'launch_app':
-      return createLaunchAppTool({ apps: deps.settings().apps, exec: deps.exec });
+      return createLaunchAppTool({ apps: deps.settings().apps, exec: deps.exec, appIndexDirs: deps.appIndexDirs, appFs: deps.appFs });
     case 'run_opencode_task':
       return createOpencodeTool({
         lookup: deps.opencodeLookup,

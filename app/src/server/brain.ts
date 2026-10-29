@@ -200,6 +200,52 @@ export function personaSystemPrompt(language: 'en' | 'hi'): string {
  * Render the thread as a transcript ending on "Mitra:" so generation continues
  * as Mitra. Deterministic: same thread in, same prompt out.
  */
+/**
+ * Tool-calling protocol (the "real Jarvis" tier): when the chat brain is
+ * given the tool catalog, a request that maps to a tool is answered with a
+ * SINGLE line of strict JSON: {"tool":"<name>","args":{...}}. Anything else is
+ * conversation. The bridge executes the action (through the ACL-gated
+ * dispatcher) and returns the spoken summary.
+ */
+export function buildToolSystemPrompt(language: 'en' | 'hi', tools: readonly string[]): string {
+  const catalog = tools.map((t) => `"${t}"`).join(', ');
+  const base = personaSystemPrompt(language);
+  return (
+    base +
+    '\n\nYou can also ACT on the user\'s PC through these tools: ' +
+    catalog +
+    '.\nIf the user\'s latest message maps to one of them, reply with ONLY one line of strict JSON, no prose, no code fence:' +
+    '\n{"tool":"<tool-name>","args":{...}}' +
+    '\nChoose args that fit the tool (e.g. notion_add_todo takes {"text":"..."}; launch_app takes {"alias":"app name"}; open_url takes {"url":"..."}; youtube_search takes {"query":"..."}; web_search takes {"query":"..."}; run_opencode_task takes {"prompt":"..."}; open_any_app/close_app take {"name":"app name"}; set_reminder takes {"minutes":N,"text":"..."}; workspace_mode takes {"name":"coding|gaming|study|chill"}).' +
+    '\nIf no tool fits, or information is missing, answer conversationally instead.'
+  );
+}
+
+/** Strict-ish action extraction: first JSON object with a valid "tool" string. */
+export function parseAction(text: string, allowed: readonly string[]): { tool: string; args: Record<string, unknown> } | null {
+  if (!text) return null;
+  const matches = text.match(/\{[^{}]*\}/g);
+  if (!matches) return null;
+  for (const candidate of matches) {
+    try {
+      const obj = JSON.parse(candidate) as { tool?: unknown; args?: unknown };
+      if (typeof obj['tool'] === 'string') {
+        const tool = obj['tool'].trim();
+        if (allowed.includes(tool)) {
+          const args =
+            obj['args'] !== null && typeof obj['args'] === 'object' && !Array.isArray(obj['args'])
+              ? (obj['args'] as Record<string, unknown>)
+              : {};
+          return { tool, args };
+        }
+      }
+    } catch {
+      /* not JSON - try the next block */
+    }
+  }
+  return null;
+}
+
 export function buildPrompt(messages: ChatMessage[]): string {
   const lines = messages.map((m) => `${m.role === 'user' ? 'User' : 'Mitra'}: ${m.content.trim()}`);
   return `${lines.join('\n')}\nMitra:`;
@@ -291,6 +337,10 @@ export interface ChatWithBrainDeps {
   chatTimeoutMs?: number;
   /** Settings.console.model — preferred over the auto-pick when non-blank. */
   preferredModel?: string;
+  /** ACL-gated dispatcher: when the brain emits a tool action, it runs here. */
+  executeTool?: (tool: string, args: Record<string, unknown>) => Promise<{ ok: boolean; summary: string }>;
+  /** Tool names advertised to the brain (only when executeTool is present). */
+  toolNames?: readonly string[];
 }
 
 /**
@@ -318,13 +368,16 @@ export async function chatWithBrain(deps: ChatWithBrainDeps): Promise<BrainChatR
     const chatTimeoutMs = deps.chatTimeoutMs ?? BRAIN_CHAT_TIMEOUT_MS;
     const abort = abortAfter(chatTimeoutMs);
     try {
+      const withTools = Boolean(deps.executeTool && deps.toolNames && deps.toolNames.length > 0);
       const res = await raceTimeout(
         fetchImpl(`${base}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: status.model,
-            system: personaSystemPrompt(language),
+            system: withTools
+              ? buildToolSystemPrompt(language, deps.toolNames!)
+              : personaSystemPrompt(language),
             prompt: buildPrompt(messages),
             stream: false,
           }),
@@ -337,6 +390,21 @@ export async function chatWithBrain(deps: ChatWithBrainDeps): Promise<BrainChatR
       const text =
         isRecord(body) && typeof body['response'] === 'string' ? (body['response'] as string).trim() : '';
       if (!text) return fallback();
+
+      // Tool action? Execute through the ACL-gated dispatcher and speak the result.
+      if (withTools) {
+        const action = parseAction(text, deps.toolNames!);
+        if (action && deps.executeTool) {
+          const outcome = await deps.executeTool(action.tool, action.args);
+          return {
+            brain: 'ollama',
+            model: status.model,
+            text: outcome.ok
+              ? outcome.summary || 'Done.'
+              : `${language === 'hi' ? 'माफ़ कीजिए, वह नहीं हो पाया' : 'Sorry, that did not work'}. ${outcome.summary}`,
+          };
+        }
+      }
       return { brain: 'ollama', model: status.model, text };
     } finally {
       abort.cancel();

@@ -46,6 +46,8 @@ export interface AvatarProps {
   licenseVisible?: boolean;
   /** Viewer mode: user-orbitable camera framed for a large window (default false). */
   orbit?: boolean;
+  /** close = head-and-shoulders (small overlay); full = entire model visible. */
+  framing?: 'close' | 'full';
   className?: string;
   /** Notified with the extracted embedded license meta on successful load. */
   onLicense?: (info: VrmLicenseInfo | null) => void;
@@ -59,6 +61,7 @@ export function Avatar({
   audioEl,
   licenseVisible = true,
   orbit = false,
+  framing = 'close',
   className,
   onLicense,
 }: AvatarProps) {
@@ -80,11 +83,13 @@ export function Avatar({
         camera={
           orbit
             ? { position: [0, 1.15, 2.8], fov: 35 }
-            : {
-                position: [0, 1.3, 1.7],
-                fov: 30,
-                rotation: [-Math.atan2(0.05, 1.7), 0, 0],
-              }
+            : framing === 'full'
+              ? { position: [0, 0.85, 3.4], fov: 38 }
+              : {
+                  position: [0, 1.3, 1.7],
+                  fov: 30,
+                  rotation: [-Math.atan2(0.05, 1.7), 0, 0],
+                }
         }
         gl={{ alpha: true, antialias: true }}
       >

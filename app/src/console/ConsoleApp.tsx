@@ -254,7 +254,7 @@ export default function ConsoleApp() {
               amplitudeRef={envelopeRef}
               vrmUrl={vrmUrl}
               licenseVisible={false}
-            />
+            framing="full" />
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
             <span className="rounded-full border border-white/10 bg-black/50 px-3 py-1 font-mono text-[11px] text-zinc-400 backdrop-blur">

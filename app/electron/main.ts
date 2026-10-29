@@ -193,6 +193,29 @@ function bootstrap(): void {
   // userData/mitra-memory.json; reminders fire a real Electron Notification (bootstrap
   // runs after app.whenReady(), the earliest point notifications may be shown);
   // status_briefing probes the real powerMonitor + node:os.
+  // Ollama autostart: the winget install does NOT auto-run the service. If the
+  // brain probe fails at boot but the binary exists, start `ollama serve`
+  // detached so the local brain lights up without user action.
+  void (async () => {
+    const probe = await fetch('http://127.0.0.1:11434/api/tags').catch(() => null);
+    if (probe && probe.ok) return;
+    const candidates = [
+      join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Ollama', 'ollama.exe'),
+      'C:\\Program Files\\Ollama\\ollama.exe',
+    ];
+    const fsx = require('node:fs') as typeof import('node:fs');
+    const { spawn } = require('node:child_process') as typeof import('node:child_process');
+    const bin = candidates.find((c) => c && fsx.existsSync(c));
+    if (!bin) return;
+    try {
+      const child = spawn(bin, ['serve'], { detached: true, stdio: 'ignore', windowsHide: true });
+      child.unref();
+      console.log('[mitra] started ollama serve for the local brain');
+    } catch (err) {
+      console.warn('[mitra] ollama autostart failed:', err);
+    }
+  })();
+
   void startBridge({
     settings: () => settings,
     mockNotion: createMockNotion({ filePath: join(app.getPath('userData'), 'mock-notion.json') }),

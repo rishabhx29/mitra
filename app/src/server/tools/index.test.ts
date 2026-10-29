@@ -312,17 +312,27 @@ describe('launch_app', () => {
     const dispatch = createToolDispatcher(makeDeps(stubs, { settings: () => makeSettings({ apps: APPS }) }));
     const result = await dispatch({ id: 'l1', tool: 'launch_app', args: { alias: 'Notepad' } });
     expect(result.ok).toBe(true);
-    expect(result.summary).toBe('Launched notepad');
+    expect(result.summary).toBe('Opening notepad');
     expect(stubs.exec.mock.calls).toEqual([['notepad']]);
   });
 
-  it('unknown alias lists the available ones and runs nothing', async () => {
+  it('unknown alias falls back to the shell resolver (start "" <name>)', async () => {
     const stubs = makeStubs();
     const dispatch = createToolDispatcher(makeDeps(stubs, { settings: () => makeSettings({ apps: APPS }) }));
     const result = await dispatch({ id: 'l2', tool: 'launch_app', args: { alias: 'skype' } });
+    // Universal resolver (§2b): shell fallback runs the raw name via `start`.
+    expect(result.ok).toBe(true);
+    expect(result.summary).toBe('Opening skype');
+    expect(stubs.exec.mock.calls.at(-1)?.[0]).toBe('start "" skype');
+  });
+
+  it('unknown alias with a FAILING shell fallback reports honestly', async () => {
+    const stubs = makeStubs();
+    stubs.exec.mockImplementation(async () => ({ code: 1, stdout: '', stderr: 'not found' }));
+    const dispatch = createToolDispatcher(makeDeps(stubs, { settings: () => makeSettings({ apps: APPS }) }));
+    const result = await dispatch({ id: 'l2b', tool: 'launch_app', args: { alias: 'skype' } });
     expect(result.ok).toBe(false);
-    expect(result.summary).toBe('Unknown app "skype". Available apps: notepad, browser');
-    expect(stubs.exec.mock.calls).toHaveLength(0);
+    expect(result.summary).toContain('skype');
   });
 
   it('missing alias lists the available ones', async () => {

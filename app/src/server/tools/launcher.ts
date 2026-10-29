@@ -3,6 +3,7 @@
 // shells out via child_process.exec (plan: "exec via child_process.exec with shell").
 import { exec } from 'node:child_process';
 import type { AppAlias } from '../../shared/types';
+import { buildAppIndex, matchApp } from './appIndex';
 import type { ToolOutcome } from './notion';
 
 export interface ExecResultLike {
@@ -16,6 +17,9 @@ export type ExecLike = (command: string) => Promise<ExecResultLike>;
 export interface LaunchAppDeps {
   apps: AppAlias[];
   exec?: ExecLike;
+  /** Start-Menu dirs for the universal resolver (plan §2b): ANY installed app. */
+  appIndexDirs?: string[];
+  appFs?: import('./appIndex').FsLike;
 }
 
 function listAliases(apps: AppAlias[]): string {
@@ -78,11 +82,73 @@ export function createLaunchAppTool(
         data: { apps: deps.apps },
       };
     }
+    // 1) configured alias (existing behavior)
     const alias = deps.apps.find((a) => a.name.toLowerCase() === raw.toLowerCase());
+    if (alias) {
+      let res0: ExecResultLike;
+      try {
+        res0 = await exec(alias.command);
+      } catch (err) {
+        return {
+          ok: false,
+          summary: `Failed to launch ${alias.name}: ${err instanceof Error ? err.message : String(err)}`,
+          data: { apps: deps.apps },
+        };
+      }
+      if (res0.code === 0) {
+        return { ok: true, summary: `Opening ${alias.name}`, data: { apps: deps.apps } };
+      }
+      // alias command failed -> keep trying the universal resolver below
+    }
+
+    // 2) universal resolver: ANY installed app via the Start-Menu index
+    if (deps.appIndexDirs && deps.appIndexDirs.length > 0) {
+      const index = buildAppIndex(deps.appIndexDirs, deps.appFs);
+      const matches = matchApp(index, raw);
+      if (matches.length > 0) {
+        const target = matches[0];
+        try {
+          const resLnk = await exec(`start "" "${target.path}"`);
+          if (resLnk.code === 0) {
+            return { ok: true, summary: `Opening ${target.name}`, data: { apps: deps.apps } };
+          }
+        } catch {
+          /* fall through to shell fallback */
+        }
+      }
+    }
+
+    // 3) shell fallback for registered app execution aliases (winget installs,
+    //    Store apps) - sanitized: no quotes/semicolons/pipes in the name.
+    const safe = raw.replace(/[";|&`]/g, '');
+    if (safe && safe === raw) {
+      try {
+        const resShell = await exec(`start "" ${safe}`);
+        if (resShell.code === 0) {
+          return { ok: true, summary: `Opening ${raw}` };
+        }
+      } catch {
+        /* final miss below */
+      }
+    }
+
     if (!alias) {
+      // closest-match hints from the index so "chrome" suggests "Google Chrome"
+      let hints = '';
+      if (deps.appIndexDirs && deps.appIndexDirs.length > 0) {
+        try {
+          const index = buildAppIndex(deps.appIndexDirs, deps.appFs);
+          const near = matchApp(index, raw)
+            .slice(0, 3)
+            .map((m) => m.name);
+          if (near.length > 0) hints = ` Did you mean: ${near.join(', ')}?`;
+        } catch {
+          /* hints are best-effort */
+        }
+      }
       return {
         ok: false,
-        summary: `Unknown app "${raw}". Available apps: ${available}`,
+        summary: `Unknown app "${raw}". Available apps: ${available}.${hints}`,
         data: { apps: deps.apps },
       };
     }

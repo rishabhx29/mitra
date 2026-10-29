@@ -10,7 +10,7 @@ import type { Server } from 'node:http';
 import process from 'node:process';
 import { DEFAULT_SETTINGS, type Settings, type ToolName, type ToolRequest, type ToolResult } from '../shared/types';
 import { checkPermission } from './acl';
-import { isKnownTool, createToolDispatcher } from './tools/index';
+import { isKnownTool, createToolDispatcher, KNOWN_TOOLS } from './tools/index';
 import { createMemoryMockNotion, type MockNotion } from './mockNotion';
 import type { ModelStore } from './models';
 import { createMemoryStore, type MemoryStore } from './memory';
@@ -233,7 +233,12 @@ export function createBridgeApp(deps: BridgeDeps): Express {
         language,
         fetchImpl,
         preferredModel: settings().console?.model?.trim() || undefined,
-      });
+        executeTool: async (tool, args) => {
+        const out = await executeTool({ id: `brain-${Date.now()}`, tool: tool as ToolName, args });
+        return { ok: out.ok, summary: out.summary };
+      },
+      toolNames: KNOWN_TOOLS,
+    });
       res.json(result);
     } catch (err) {
       // chatWithBrain never throws; this is defense in depth for the route edge.

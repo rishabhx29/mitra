@@ -133,6 +133,37 @@ const MEMORY_REMEMBER_RES: RegExp[] = [
  */
 const MEMORY_CONNECTOR_WORDS = new Set(['that', 'this', 'it', 'ki', 'ke', 'कि']);
 
+/** Well-known site tokens -> canonical URLs (checked before app aliases). */
+const WELL_KNOWN_SITES: Readonly<Record<string, string>> = {
+  youtube: 'https://www.youtube.com',
+  google: 'https://www.google.com',
+  gmail: 'https://mail.google.com',
+  github: 'https://github.com',
+  reddit: 'https://www.reddit.com',
+  netflix: 'https://www.netflix.com',
+  spotify: 'https://open.spotify.com',
+  twitter: 'https://x.com',
+  x: 'https://x.com',
+  instagram: 'https://www.instagram.com',
+  whatsapp: 'https://web.whatsapp.com',
+  facebook: 'https://www.facebook.com',
+  chatgpt: 'https://chatgpt.com',
+  amazon: 'https://www.amazon.in',
+  flipkart: 'https://www.flipkart.com',
+  linkedin: 'https://www.linkedin.com',
+};
+
+/** "open youtube" / "youtube kholo" / "go to github" -> canonical URL, else null. */
+export function matchWellKnownSite(text: string): string | null {
+  const t = text.toLowerCase();
+  const hasVerb = /\b(open|kholo|go\s+to|visit|launch)\b/.test(t);
+  if (!hasVerb) return null;
+  for (const [token, url] of Object.entries(WELL_KNOWN_SITES)) {
+    if (new RegExp(`\\b${token}\\b`).test(t)) return url;
+  }
+  return null;
+}
+
 function parseMemory(text: string): MockIntent | null {
   if (MEMORY_RECALL_ALL_RES.some((re) => re.test(text))) return { kind: 'memory_recall_all' };
   for (const re of MEMORY_RECALL_RES) {
@@ -386,6 +417,11 @@ export function parseIntent(raw: string, modes: WorkspaceMode[] = []): MockInten
   // §2b: web search before open_url ("google X" is not a domain).
   const web = firstCapture(text, WEB_SEARCH_RES);
   if (web) return { kind: 'web_search', query: web };
+
+  // Well-known sites: "open youtube/netflix/github..." opens the SITE, not an
+  // app alias (the #1 deterministic miss users hit).
+  const site = matchWellKnownSite(text);
+  if (site) return { kind: 'open_url', url: site };
 
   const app = parseLaunchAlias(text);
   if (app) return { kind: 'launch_app', alias: app };

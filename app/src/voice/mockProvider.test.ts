@@ -58,7 +58,8 @@ describe('parseIntent — launch_app', () => {
   it('parses "open X" and strips leading articles', () => {
     expect(parseIntent('open notepad')).toEqual({ kind: 'launch_app', alias: 'notepad' });
     expect(parseIntent('open the calculator')).toEqual({ kind: 'launch_app', alias: 'calculator' });
-    expect(parseIntent('launch spotify')).toEqual({ kind: 'launch_app', alias: 'spotify' });
+    expect(parseIntent('launch spotify')).toEqual({ kind: 'open_url', url: 'https://open.spotify.com' });
+    expect(parseIntent('open vscode')).toEqual({ kind: 'launch_app', alias: 'vscode' });
   });
 
   it('parses Hinglish "X kholo" and Devanagari', () => {
@@ -227,7 +228,8 @@ describe('parseIntent — youtube_search', () => {
     // Bare search → null here; the bridge route tier (Laya) may name
     // youtube_search, and pickArgs' bare-search shape extracts the query.
     expect(parseIntent('search quantum computing')).toBeNull();
-    expect(parseIntent('open youtube')).toEqual({ kind: 'launch_app', alias: 'youtube' });
+    // Well-known sites now open as SITES (user direction): youtube is open_url.
+    expect(parseIntent('open youtube')).toEqual({ kind: 'open_url', url: 'https://www.youtube.com' });
   });
 });
 
