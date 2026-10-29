@@ -75,6 +75,89 @@ describe('parseIntent — app_task (open an app AND write content into it)', () 
     });
   });
 
+  it('hand-it-a-prompt composites: "give it …" / "tell X to …" / "ask X to …" route correctly', () => {
+    // The real-world miss: the verb list only had build-verbs, so the prompt
+    // was dropped and the whole utterance became a mangled launch alias.
+    expect(parseIntent('open opencode and give it some prompt')).toEqual({
+      kind: 'opencode_task',
+      prompt: 'some prompt',
+    });
+    expect(parseIntent('open work buddy and give it a prompt')).toEqual({
+      kind: 'app_task',
+      app: 'work buddy',
+      content: 'a prompt',
+    });
+    expect(parseIntent('tell opencode to build a snake game')).toEqual({
+      kind: 'opencode_task',
+      prompt: 'build a snake game',
+    });
+    expect(parseIntent('tell work buddy to draft an email')).toEqual({
+      kind: 'app_task',
+      app: 'work buddy',
+      content: 'draft an email',
+    });
+    expect(parseIntent('ask work buddy to summarize my notes')).toEqual({
+      kind: 'app_task',
+      app: 'work buddy',
+      content: 'summarize my notes',
+    });
+    // send/feed/drop/dump share the same composite verbs.
+    expect(parseIntent('open notepad and send the meeting notes')).toEqual({
+      kind: 'app_task',
+      app: 'notepad',
+      content: 'the meeting notes',
+    });
+    // No pronoun after the verb → the content keeps everything.
+    expect(parseIntent('open notepad and give hello world')).toEqual({
+      kind: 'app_task',
+      app: 'notepad',
+      content: 'hello world',
+    });
+    // The pronoun is consumed, not typed into the app.
+    expect(parseIntent('open notepad and tell it to save the file')).toEqual({
+      kind: 'app_task',
+      app: 'notepad',
+      content: 'to save the file',
+    });
+  });
+
+  it('verb-first give shapes: "give notepad this note: buy milk" (en + Hinglish)', () => {
+    expect(parseIntent('give notepad this note: buy milk')).toEqual({
+      kind: 'app_task',
+      app: 'notepad',
+      content: 'buy milk',
+    });
+    expect(parseAppTask('send slack a note: standup moved to 10')).toEqual({
+      kind: 'app_task',
+      app: 'slack',
+      content: 'standup moved to 10',
+    });
+    // Hinglish ko-handoff and me-shape with the de do tail.
+    expect(parseIntent('notepad ko ye note de do')).toEqual({
+      kind: 'app_task',
+      app: 'notepad',
+      content: 'ye note',
+    });
+    expect(parseIntent('notepad me ye note de do')).toEqual({
+      kind: 'app_task',
+      app: 'notepad',
+      content: 'ye note',
+    });
+    // Hinglish opencode handoff keeps routing to opencode_task.
+    expect(parseIntent('opencode ko ye prompt bhejo')).toEqual({
+      kind: 'opencode_task',
+      prompt: 'ye prompt',
+    });
+  });
+
+  it('conversational give/tell/ask never becomes app_task (pronoun apps are not apps)', () => {
+    expect(parseIntent('give me a haiku about cats')).toBeNull();
+    expect(parseIntent('give me the weather')).toBeNull();
+    expect(parseIntent('tell me a joke')).toBeNull();
+    expect(parseIntent('ask me anything')).toBeNull();
+    expect(parseIntent('send me the file')).toBeNull();
+  });
+
   it('non-hijack: bare notes, to-dos, searches and plain launches keep their intents', () => {
     expect(parseIntent('note down buy milk')).toMatchObject({ kind: 'note_notepad' });
     expect(parseIntent('add milk to my todo list')).toMatchObject({ kind: 'add_todo' });

@@ -156,7 +156,9 @@ export const DEFAULT_SETTINGS: Settings = {
   orbColors: { a: '#ff5a2b', b: '#ff8a3d' },
   hotkey: 'Ctrl+Shift+Space',
   language: 'en',
-  permissions: { notion: true, launcher: true, terminal: false, browser: true },
+  // terminal defaults ON: run_opencode_task is the flagship flow — a fresh
+  // install must not answer it with "Permission denied: terminal".
+  permissions: { notion: true, launcher: true, terminal: true, browser: true },
   apps: [
     { name: 'notepad', command: 'notepad' },
     { name: 'terminal', command: 'wt' },

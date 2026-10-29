@@ -4,6 +4,7 @@
 // lock_workstation → launcher, memory → notion, status_briefing → no gate ('none').
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type Permissions, type ToolName } from '../shared/types';
+import { TOOL_GATES as SHARED_TOOL_GATES } from '../shared/toolGates';
 import { checkPermission, TOOL_GATES, type PermissionGate } from './acl';
 
 const ALL_DENIED: Permissions = { notion: false, launcher: false, terminal: false, browser: false };
@@ -35,6 +36,13 @@ const TOOL_GATE_CASES: Array<[ToolName, PermissionGate]> = [
 const GATELESS_TOOLS: ToolName[] = ['status_briefing'];
 
 describe('TOOL_GATES mapping (plan Task C + ULTRON_PORT rows)', () => {
+  // The mapping lives in shared/toolGates.ts (the renderer's Capabilities tool
+  // matrix consumes the same object); acl.ts must re-export it verbatim so the
+  // enforced matrix can never drift from the rendered one.
+  it('is the shared mapping (acl consumes shared/toolGates — one source of truth)', () => {
+    expect(TOOL_GATES).toBe(SHARED_TOOL_GATES);
+  });
+
   it.each(TOOL_GATE_CASES)('%s → %s gate', (tool, gate) => {
     expect(TOOL_GATES[tool]).toBe(gate);
   });
@@ -110,7 +118,7 @@ describe("checkPermission — gateless tools ('none', read-only + local)", () =>
 });
 
 describe('shipped defaults (DEFAULT_SETTINGS.permissions)', () => {
-  // DEFAULT_SETTINGS: { notion: true, launcher: true, terminal: false, browser: true }
+  // DEFAULT_SETTINGS: { notion: true, launcher: true, terminal: true, browser: true }
   it('notion_add_todo is allowed out of the box', () => {
     expect(checkPermission('notion_add_todo', DEFAULT_SETTINGS.permissions).allowed).toBe(true);
   });
@@ -119,10 +127,9 @@ describe('shipped defaults (DEFAULT_SETTINGS.permissions)', () => {
     expect(checkPermission('launch_app', DEFAULT_SETTINGS.permissions).allowed).toBe(true);
   });
 
-  it('run_opencode_task is DENIED out of the box (terminal: false)', () => {
+  it('run_opencode_task is allowed out of the box (terminal: true — flagship flow)', () => {
     const decision = checkPermission('run_opencode_task', DEFAULT_SETTINGS.permissions);
-    expect(decision.allowed).toBe(false);
-    expect(decision.reason).toBe('Permission denied: terminal');
+    expect(decision.allowed).toBe(true);
   });
 
   it('open_url is allowed out of the box', () => {

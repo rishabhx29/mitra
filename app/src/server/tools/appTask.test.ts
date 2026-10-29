@@ -1,23 +1,61 @@
 // app_task tool tests — alias launch + the win32 one-shot typing command
-// (AppActivate + SendKeys + the base64 content round-trip), Start-Menu index
-// resolution, unknown-app refusal, non-win32 honest degradation, the optional
-// {ENTER}, content with newlines/quotes surviving the shell, and the
-// dispatcher-level wiring + ACL denial (launcher gate).
+// (AppActivate + SendKeys + the base64 content round-trip), the WINDOW-WAIT
+// that polls Get-Process before typing (replacing the blind 1.5s sleep), the
+// 30s exec budget, Start-Menu index resolution, unknown-app refusal, non-win32
+// honest degradation, the optional {ENTER}, content with newlines/quotes
+// surviving the shell, and the dispatcher-level wiring + ACL denial (launcher gate).
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../shared/types';
 import { createToolDispatcher } from './index';
-import { APP_TASK_LAUNCH_DELAY_MS, buildTypeCommand, createAppTaskTool, escapeSendKeys } from './appTask';
+import {
+  APP_TASK_EXEC_TIMEOUT_MS,
+  APP_TASK_LAUNCH_DELAY_MS,
+  APP_TASK_WINDOW_POLL_INTERVAL_MS,
+  APP_TASK_WINDOW_WAIT_MS,
+  buildTypeCommand,
+  buildWindowWaitCommand,
+  createAppTaskTool,
+  escapeSendKeys,
+} from './appTask';
 
 const LNK = 'C:\\SM\\Programs\\Notepad.lnk';
 const APPS = [{ name: 'notepad', command: 'notepad' }];
 
-function fakeExec(code = 0) {
+/** The window-wait probe command (distinguishes polls from the typing command). */
+const IS_WINDOW_WAIT = (command: string): boolean => command.includes('Measure-Object');
+
+/**
+ * Fake exec: launch/alias commands return `code`; window-wait probes return
+ * successive window counts from `windowPolls` (last value repeats); typing
+ * commands return `code` too — pass a custom exec when they must differ.
+ */
+function fakeExec(code = 0, windowPolls: number[] = [1]) {
+  const commands: string[] = [];
+  let poll = 0;
+  return {
+    commands,
+    exec: async (command: string) => {
+      commands.push(command);
+      if (IS_WINDOW_WAIT(command)) {
+        const count = windowPolls[Math.min(poll, windowPolls.length - 1)] ?? 0;
+        poll += 1;
+        return { code: 0, stdout: String(count), stderr: '' };
+      }
+      return { code, stdout: '', stderr: code === 0 ? '' : 'start failed' };
+    },
+  };
+}
+
+/** Fake exec where the typing invocation returns a fixed non-zero result. */
+function fakeExecTypingResult(typing: { code: number; stderr: string }) {
   const commands: string[] = [];
   return {
     commands,
     exec: async (command: string) => {
       commands.push(command);
-      return { code, stdout: '', stderr: code === 0 ? '' : 'start failed' };
+      if (IS_WINDOW_WAIT(command)) return { code: 0, stdout: '1', stderr: '' };
+      if (command.startsWith('powershell')) return { ...typing, stdout: '' };
+      return { code: 0, stdout: '', stderr: '' };
     },
   };
 }
@@ -42,30 +80,40 @@ function decodedContent(command: string): string {
   return Buffer.from(m![1] ?? '', 'base64').toString('utf8');
 }
 
+/** Decode every base64 literal embedded in the typing command. */
+function literals(command: string): string[] {
+  return [...command.matchAll(/FromBase64String\('([A-Za-z0-9+/=]+)'\)/g)].map((m) =>
+    Buffer.from(m[1] ?? '', 'base64').toString('utf8'),
+  );
+}
+
 describe('buildTypeCommand', () => {
-  it('activates the window and types the ESCAPED text directly first (no clipboard)', () => {
+  it('activates the window and types the ESCAPED text in chunks (no clipboard)', () => {
     const command = buildTypeCommand('Notepad', 'line one\nline "two" — done', false);
     expect(command).toContain("AppActivate('Notepad')");
     expect(command).toContain('$w.SendKeys');
     expect(command).toContain('-STA');
     expect(command).toContain('-WindowStyle Hidden');
-    const literals = [...command.matchAll(/FromBase64String\('([A-Za-z0-9+/=]+)'\)/g)].map((m) =>
-      Buffer.from(m[1] ?? '', 'base64').toString('utf8'),
-    );
-    expect(literals[0]).toBe('line one{ENTER}line "two" — done');
+    // All typing chunks (every literal except the final raw clipboard one)
+    // concatenate back to the SendKeys-escaped text.
+    const ls = literals(command);
+    expect(ls.slice(0, -1).join('')).toBe('line one{ENTER}line "two" — done');
+    expect(ls.at(-1)).toBe('line one\nline "two" — done');
+    expect(command).toContain('Start-Sleep -Milliseconds 60');
   });
 
-  it('keeps the raw content for the clipboard fallback inside the typing catch', () => {
+  it('keeps the raw content for the clipboard fallback after the typing chunks', () => {
     const command = buildTypeCommand('Notepad', 'line one\na + b (x)', false);
-    const literals = [...command.matchAll(/FromBase64String\('([A-Za-z0-9+/=]+)'\)/g)].map((m) =>
-      Buffer.from(m[1] ?? '', 'base64').toString('utf8'),
-    );
-    expect(literals[1]).toBe('line one\na + b (x)');
-    // clipboard fallback exists, after the primary SendKeys, with retries
+    const ls = literals(command);
+    expect(ls.slice(0, -1).join('')).toBe('line one{ENTER}a {+} b {(}x{)}');
+    expect(ls.at(-1)).toBe('line one\na + b (x)');
+    // clipboard fallback exists, after the primary SendKeys, single bounded try
     expect(command.indexOf('$w.SendKeys')).toBeLessThan(command.indexOf('Set-Clipboard'));
-    expect(command).toContain('for ($i = 0; $i -lt 2');
-    expect(command).toContain('Start-Sleep -Milliseconds 150');
+    expect(command).toContain('Set-Clipboard -Value');
+    expect(command).toContain('PATH=typed');
+    expect(command).toContain('PATH=pasted');
     expect(command).not.toContain('Add-Type');
+    expect(command).toContain('clip-error');
     expect(command).toContain('Get-Process');
   });
 
@@ -84,19 +132,107 @@ describe('buildTypeCommand', () => {
   });
 });
 
+describe('buildWindowWaitCommand', () => {
+  it('probes the process for a visible window via Get-Process + Measure-Object', () => {
+    const command = buildWindowWaitCommand('notepad');
+    expect(command).toContain("Get-Process -Name 'notepad'");
+    expect(command).toContain('MainWindowHandle -ne 0');
+    expect(command).toContain('Measure-Object).Count');
+    expect(command).toContain('-WindowStyle Hidden');
+    expect(command).toContain('-ErrorAction SilentlyContinue');
+  });
+});
+
+describe('app_task timing budget', () => {
+  it('typing + window-wait polls share a 30s exec budget; the 1.5s pause survives as fallback', () => {
+    expect(APP_TASK_EXEC_TIMEOUT_MS).toBe(30_000);
+    expect(APP_TASK_WINDOW_POLL_INTERVAL_MS).toBe(400);
+    expect(APP_TASK_WINDOW_WAIT_MS).toBe(8_000);
+    expect(APP_TASK_LAUNCH_DELAY_MS).toBe(1_500);
+  });
+});
+
 describe('createAppTaskTool', () => {
-  it('happy (win32): resolves the alias, waits the launch delay, then ONE PowerShell typing invocation', async () => {
+  it('happy (win32): resolves the alias, window-waits ONE poll, then ONE PowerShell typing invocation', async () => {
+    delayCalls = 0;
     const { exec, commands } = fakeExec();
     const tool = createAppTaskTool({ apps: APPS, exec, platform: 'win32', delay: spyDelay });
     const outcome = await tool({ app: 'notepad', content: 'buy milk' });
     expect(outcome.ok).toBe(true);
     expect(outcome.summary).toBe('Opened notepad and typed your text');
+    // The window was already up at the first poll: just the settle delay —
+    // the input pipeline needs a beat after the window handle exists, or the
+    // keystrokes get swallowed (the "took two attempts" bug).
     expect(delayCalls).toBe(1);
-    expect(commands).toHaveLength(2);
-    expect(commands[0]).toBe('notepad');
-    expect(commands[1]).toContain("AppActivate('notepad')");
-    expect(commands[1]).toContain("$w.SendKeys('^v')");
-    expect(decodedContent(commands[1] ?? '')).toBe('buy milk');
+    expect(commands).toHaveLength(3); // launch, window probe, typing
+    expect(commands[0]).toBe('start "" notepad');
+    expect(IS_WINDOW_WAIT(commands[1] ?? '')).toBe(true);
+    expect(commands[2]).toContain("AppActivate('notepad')");
+    expect(commands[2]).toContain("$w.SendKeys('^v')");
+    expect(decodedContent(commands[2] ?? '')).toBe('buy milk');
+  });
+
+  it('window-wait: polls until the window exists, settles, then types once', async () => {
+    const { exec, commands } = fakeExec(0, [0, 1]); // window appears on the 2nd poll
+    const delays: number[] = [];
+    const tool = createAppTaskTool({
+      apps: APPS,
+      exec,
+      platform: 'win32',
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    const outcome = await tool({ app: 'notepad', content: 'hello world' });
+    expect(outcome.ok).toBe(true);
+    expect(commands.filter(IS_WINDOW_WAIT)).toHaveLength(2);
+    expect(delays).toEqual([APP_TASK_WINDOW_POLL_INTERVAL_MS, 1_500]); // poll, then settle
+    expect(commands[commands.length - 1]).toContain('$w.SendKeys');
+  });
+
+  it('window-wait: window never appears → polls to the cap, falls back to the fixed 1.5s, still types', async () => {
+    const { exec, commands } = fakeExec(0, [0]); // every probe reports zero windows
+    const delays: number[] = [];
+    const tool = createAppTaskTool({
+      apps: APPS,
+      exec,
+      platform: 'win32',
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    const outcome = await tool({ app: 'notepad', content: 'hello world' });
+    expect(outcome.ok).toBe(true); // typing is still attempted after the fallback
+    const maxPolls = Math.round(APP_TASK_WINDOW_WAIT_MS / APP_TASK_WINDOW_POLL_INTERVAL_MS);
+    expect(commands.filter(IS_WINDOW_WAIT)).toHaveLength(maxPolls);
+    expect(delays).toEqual([
+      ...Array.from({ length: maxPolls - 1 }, () => APP_TASK_WINDOW_POLL_INTERVAL_MS),
+      APP_TASK_LAUNCH_DELAY_MS,
+    ]);
+    expect(commands[commands.length - 1]).toContain('$w.SendKeys');
+  });
+
+  it('window-wait: a broken probe falls back to the fixed 1.5s and still types', async () => {
+    const commands: string[] = [];
+    const exec = async (command: string) => {
+      commands.push(command);
+      if (IS_WINDOW_WAIT(command)) throw new Error('powershell blocked');
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    const delays: number[] = [];
+    const tool = createAppTaskTool({
+      apps: APPS,
+      exec,
+      platform: 'win32',
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    const outcome = await tool({ app: 'notepad', content: 'hello world' });
+    expect(outcome.ok).toBe(true);
+    expect(outcome.summary).toBe('Opened notepad and typed your text');
+    expect(delays).toEqual([APP_TASK_LAUNCH_DELAY_MS]);
+    expect(commands[commands.length - 1]).toContain("AppActivate('notepad')");
   });
 
   it('resolves through the Start-Menu index when no alias matches (and launches the .lnk)', async () => {
@@ -113,22 +249,9 @@ describe('createAppTaskTool', () => {
     expect(outcome.ok).toBe(true);
     expect(outcome.summary).toBe('Opened Notepad and typed your text');
     expect(commands[0]).toBe(`start "" "${LNK}"`);
-    expect(decodedContent(commands[1] ?? '')).toBe('hello world');
-  });
-
-  it('waits APP_TASK_LAUNCH_DELAY_MS (1500ms) before typing', async () => {
-    const { exec } = fakeExec();
-    let waited = 0;
-    const tool = createAppTaskTool({
-      apps: APPS,
-      exec,
-      platform: 'win32',
-      delay: async (ms) => {
-        waited = ms;
-      },
-    });
-    await tool({ app: 'notepad', content: 'hello world' });
-    expect(waited).toBe(APP_TASK_LAUNCH_DELAY_MS);
+    // typing chunks concatenate to the escaped content (last literal = raw clipboard fallback)
+    const ls = literals(commands[commands.length - 1] ?? '');
+    expect(ls.slice(0, -1).join('')).toBe('hello world');
   });
 
   it('unknown app → honest refusal with did-you-mean hints, no typing command', async () => {
@@ -161,7 +284,7 @@ describe('createAppTaskTool', () => {
     const outcome = await tool({ app: 'notepad', content: 'hello world' });
     expect(outcome.ok).toBe(true);
     expect(outcome.summary).toBe('Opened notepad (typing into apps is Windows-only right now)');
-    expect(commands).toEqual(['notepad']);
+    expect(commands).toEqual(['start "" notepad']);
   });
 
   it('missing app or content args → refusal without exec', async () => {
@@ -173,14 +296,7 @@ describe('createAppTaskTool', () => {
   });
 
   it('a failed typing invocation keeps the app-open fact but reports the copy failure', async () => {
-    const commands: string[] = [];
-    const exec = async (command: string) => {
-      commands.push(command);
-      // The launch succeeds; the PowerShell typing step fails.
-      return command.startsWith('powershell')
-        ? { code: 1, stdout: '', stderr: 'no window' }
-        : { code: 0, stdout: '', stderr: '' };
-    };
+    const { exec } = fakeExecTypingResult({ code: 1, stderr: 'no window' });
     const tool = createAppTaskTool({ apps: APPS, exec, platform: 'win32', delay: noDelay });
     const outcome = await tool({ app: 'notepad', content: 'hello world' });
     expect(outcome.ok).toBe(false);
@@ -188,13 +304,7 @@ describe('createAppTaskTool', () => {
   });
 
   it('exit 2 (no window focus): honest partial success — never pastes into an unknown window', async () => {
-    const commands: string[] = [];
-    const exec = async (command: string) => {
-      commands.push(command);
-      return command.startsWith('powershell')
-        ? { code: 2, stdout: '', stderr: 'no-focus' }
-        : { code: 0, stdout: '', stderr: '' };
-    };
+    const { exec } = fakeExecTypingResult({ code: 2, stderr: 'no-focus' });
     const tool = createAppTaskTool({ apps: APPS, exec, platform: 'win32', delay: noDelay });
     const outcome = await tool({ app: 'notepad', content: 'hello world' });
     expect(outcome.ok).toBe(true);
@@ -202,10 +312,7 @@ describe('createAppTaskTool', () => {
   });
 
   it('a generic typing failure (exit 1) keeps the app-open fact but refuses the success claim', async () => {
-    const exec = async (command: string) =>
-      command.startsWith('powershell')
-        ? { code: 1, stdout: '', stderr: 'something else broke' }
-        : { code: 0, stdout: '', stderr: '' };
+    const { exec } = fakeExecTypingResult({ code: 1, stderr: 'something else broke' });
     const tool = createAppTaskTool({ apps: APPS, exec, platform: 'win32', delay: noDelay });
     const outcome = await tool({ app: 'notepad', content: 'hello world' });
     expect(outcome.ok).toBe(false);
@@ -213,10 +320,7 @@ describe('createAppTaskTool', () => {
   });
 
   it('exit 4 (keystrokes refused): honest failure pointing at the clipboard fallback', async () => {
-    const exec = async (command: string) =>
-      command.startsWith('powershell')
-        ? { code: 4, stdout: '', stderr: 'keys-denied' }
-        : { code: 0, stdout: '', stderr: '' };
+    const { exec } = fakeExecTypingResult({ code: 4, stderr: 'keys-denied' });
     const tool = createAppTaskTool({ apps: APPS, exec, platform: 'win32', delay: noDelay });
     const outcome = await tool({ app: 'notepad', content: 'hello world' });
     expect(outcome.ok).toBe(false);
@@ -236,8 +340,8 @@ describe('app_task dispatcher wiring', () => {
     const outcome = await dispatch({ id: 't1', tool: 'app_task', args: { app: 'notepad', content: 'hi there' } });
     expect(outcome.ok).toBe(true);
     expect(outcome.summary).toBe('Opened notepad and typed your text');
-    expect(commands[0]).toBe('notepad');
-    expect(commands[1]).toContain('$w.SendKeys');
+    expect(commands[0]).toBe('start "" notepad');
+    expect(commands[commands.length - 1]).toContain('$w.SendKeys');
   });
 
   it('denied when the launcher permission is off (handler never runs)', async () => {

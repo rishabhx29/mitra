@@ -40,11 +40,19 @@ const LANG_EN_RE =
 const IDENTITY_RE =
   /\b(?:who\s+are\s+you|what\s+can\s+you\s+do|what(?:'s|\s+is)\s+your\s+name|tum\s+kaun\s+ho|aap\s+kaun\s+ho|tumhara\s+naam|aapka\s+naam)\b|तुम\s*कौन\s*हो|आप\s*कौन\s*हो|तुम्हारा\s*नाम|आपका\s*नाम/;
 
-// 3) opencode task — BEFORE launch-app so "open opencode and build …" routes to the tool.
+// 3) opencode task — BEFORE launch-app so "open opencode and build …" routes to
+//    the tool. The verb list covers the build verbs AND the hand-it-a-prompt
+//    verbs ("open opencode and give it some prompt" / "ask it to …"), with an
+//    optional it/usko/usse/ko pronoun between verb and content so the pronoun
+//    never pollutes the prompt. Longer verbs are listed before their prefixes
+//    (design/deso before de, banao before bana) and every verb carries \b so
+//    "do" can never half-match "download".
 const OPENCODE_RES: RegExp[] = [
-  /^open\s+opencode\s+(?:and|aur|or|phir|then)?\s*(?:please\s+)?(?:build|design|deso|make|banao|bana|likho|run|chalu|chala)\b[\s:,-]*(.+)$/,
-  /^opencode\s+(?:me|mein|par|pe)\s+(.+?)\s+(?:banao|bana|likho|build)$/,
-  /^opencode\s+(?:build|design|deso|make|banao|bana|likho|run)\b[\s:,-]*(.+)$/,
+  /^open\s+opencode\s+(?:and|aur|or|phir|then)?\s*(?:please\s+)?(?:(?:write|type)\s+into|build|design|deso|make|banao|bana|likho|run|chalu|chala|give|ask|tell|send|prompt|feed|de\s+do|dedo|de|do|bolo|bhejo|kaam)\b(?:\s+(?:it|usko|usse|ko))?\b[\s:,-]*(.+)$/,
+  /^opencode\s+(?:me|mein|par|pe)\s+(.+?)\s+(?:banao|bana|likho|build|de\s+do|dedo|bhejo)$/,
+  /^opencode\s+(?:build|design|deso|make|banao|bana|likho|run|give|ask|tell|send|prompt|feed|de\s+do|dedo|de|do|bolo|bhejo|kaam)\b(?:\s+(?:it|usko|usse|ko))?\b[\s:,-]*(.+)$/,
+  // verb-first request shape: "tell opencode to build a snake game"
+  /^(?:tell|ask)\s+opencode\s+to\s+(.+)$/,
 ];
 
 // 4) add-todo — "add X to my (todo )?list" / "list me X" / "X add karo" / "meri list me X jodo" (+ Devanagari).
@@ -83,15 +91,47 @@ const LAUNCH_RES: RegExp[] = [
 //     "open notepad" falls through to launch_app unchanged. Named groups keep
 //     the content-first table row readable.
 export const APP_TASK_RES: RegExp[] = [
-  // en composite: "open notepad and write hello" / "launch calc, type 2+2"
-  /^(?:open|launch|start)\s+(?<app>.{1,40}?)\s*(?:,|\s+(?:and|aur|then|phir)\s+)\s*(?:write|type|note|add|paste|put|enter)\s+(?<content>.+)$/,
+  // en composite: "open notepad and write hello" / "open work buddy and give it
+  // a prompt" / "launch calc, type 2+2" — the verb list includes the
+  // hand-it-content verbs (give/tell/ask/send/feed/drop/dump + Hinglish
+  // de/do/bolo/bhejo) with an optional it/usko/usse/ko pronoun consumed between
+  // verb and content.
+  /^(?:open|launch|start)\s+(?<app>.{1,40}?)\s*(?:,|\s+(?:and|aur|then|phir)\s+)\s*(?:write|type|note|add|paste|put|enter|give|tell|ask|send|feed|drop|dump|de\s+do|dedo|de|do|bolo|bhejo)\b(?:\s+(?:it|usko|usse|ko))?\s+(?<content>.+)$/,
   // en content-first: "write hello into mspaint" (notepad variants stay note_notepad)
   /^(?:write|type|note|put)\s+(?<content>.+?)\s+(?:in|into|on|to)\s+(?<app>.{1,40}?)$/,
+  // en verb-first with a content marker: "give notepad this note: buy milk" /
+  // "send slack a note: standup moved" — the marker (this/a/the/ye note, or a
+  // bare this/ye) keeps the app token anchored instead of greedy-backtracking
+  // into the first word of the content.
+  /^(?:give|send|feed|drop|dump)\s+(?<app>.{1,40}?)\s+(?:this\s+note|the\s+note|a\s+note|ye\s+note|this|ye)\s*[:\-]?\s*(?<content>.{3,})$/,
+  // en verb-first request: "tell work buddy to draft an email" — the explicit
+  // "to" anchors the app token ("tell opencode to …" is caught by OPENCODE_RES
+  // first, but even here an opencode app token reroutes to opencode_task).
+  /^(?:tell|ask)\s+(?<app>.{1,40}?)\s+to\s+(?<content>.{3,})$/,
   // Hinglish app-first: "msword me note likho" (the notepad variant = note_notepad)
-  /^(?<app>.{1,40}?)\s*(?:mein|me|main)\s*(?<content>.+?)\s*(?:likho|likh\s+do|type\s+karo|daalo|daal\s+do|add\s+karo)$/,
+  /^(?<app>.{1,40}?)\s*(?:mein|me|main)\s*(?<content>.+?)\s*(?:likho|likh\s+do|type\s+karo|daalo|daal\s+do|add\s+karo|de\s+do|dedo|bhejo|bolo)$/,
+  // Hinglish ko-handoff: "notepad ko ye note de do" / "opencode ko ye prompt bhejo"
+  /^(?<app>.{1,40}?)\s+ko\s+(?<content>.+?)\s+(?:de\s+do|dedo|bhejo)$/,
   // Hinglish kholo composite: "vscode kholo aur hello world likho"
-  /^(?<app>.{1,40}?)\s+kholo\s*(?:aur|and)?\s*(?<content>.+?)\s*(?:likho|likh\s+do|type\s+karo)$/,
+  /^(?<app>.{1,40}?)\s+kholo\s*(?:aur|and)?\s*(?<content>.+?)\s*(?:likho|likh\s+do|type\s+karo|de\s+do|dedo|bhejo|bolo)$/,
 ];
+
+/**
+ * App tokens that are really pronouns — "give me a haiku" / "tell me a joke"
+ * are chat, never app_task. Only the verb-first shapes can produce these.
+ */
+const APP_TASK_PRONOUN_APPS = new Set([
+  'me',
+  'it',
+  'this',
+  'that',
+  'them',
+  'us',
+  'him',
+  'her',
+  'myself',
+  'itself',
+]);
 
 /** App tokens that route to their own richer tool instead of plain app_task. */
 const OPENCODE_APP_RE = /^opencode$/;
@@ -113,6 +153,9 @@ export function parseAppTask(text: string): MockIntent | null {
     // Trim trailing punctuation from the content; require a real task (>2 chars).
     const content = cleanupCapture((m.groups['content'] ?? '').replace(/[.,!?;:"'’।]+$/, ''));
     if (!app || content.length <= 2) continue;
+    // "give me a haiku" / "tell me a joke" — a pronoun is not an app; fall
+    // through so the utterance stays conversational.
+    if (APP_TASK_PRONOUN_APPS.has(app.toLowerCase())) continue;
     if (OPENCODE_APP_RE.test(app.toLowerCase())) return { kind: 'opencode_task', prompt: content };
     return { kind: 'app_task', app, content };
   }

@@ -34,8 +34,16 @@ function firstLine(s: string): string {
   return line ? line.slice(0, 160) : '';
 }
 
-/** Default adapter: shell exec, hidden window, 15s cap (launchers return immediately). */
-export function createDefaultExec(): ExecLike {
+/** Options for the default exec adapter (all optional — defaults match the
+ *  historical behavior so every existing caller is unchanged). */
+export interface DefaultExecOpts {
+  /** Per-command timeout in ms (default 15000). */
+  timeoutMs?: number;
+}
+
+/** Default adapter: shell exec, hidden window, timeout cap (launchers return immediately). */
+export function createDefaultExec(opts: DefaultExecOpts = {}): ExecLike {
+  const timeout = opts.timeoutMs ?? 15_000;
   return async (command) => {
     try {
       const res = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -43,7 +51,7 @@ export function createDefaultExec(): ExecLike {
         // customizes WHICH shell, so it stays at its default (string-typed).
         exec(
           command,
-          { windowsHide: true, timeout: 15_000 },
+          { windowsHide: true, timeout },
           (err, stdout, stderr) => {
             if (err) {
               const enriched = err as { message?: string; code?: string; stdout?: string; stderr?: string };
