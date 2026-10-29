@@ -37,9 +37,8 @@ body,
   background: transparent;
 }
 
-/* Settings shell — Theme v2 "Nebula": deep-space navy base, aurora gradients
-   (cyan/violet/magenta whispers) tinted by the user's orb colors, a faint tech
-   grid, and a vignette. Applied on the settings root div only. */
+/* Settings shell — Ember theme: deep warm base tinted by the user's orb colors,
+   a vignette, and the rail/content split. Applied on the settings root div only. */
 .mitra-shell {
   background:
     radial-gradient(900px 480px at 0% 0%, rgb(255 77 46 / 0.07), transparent 55%),
@@ -141,37 +140,48 @@ body,
 }
 
 
-/* ---- Top bar (launcher layout, ref 2): flat, hairline-separated, pill tabs. */
-.top-bar {
-  border-bottom: 1px solid var(--line);
-  background: #141416;
+/* ---- Sidebar rail (Steam-client style: brand top, vertical nav, status at
+        the bottom; content sits to the right) ---------------------------------- */
+
+/* Rail: full-height left column, hairline right edge; the page background
+   (.mitra-shell gradient) shows through. */
+.side-rail {
+  border-right: 1px solid var(--line);
 }
 
-.top-tab {
-  border: 1px solid transparent;
+/* Nav item: quiet by default; the ACTIVE state's ember edge indicator is the
+   .side-indicator span rendered at -left-4 (the rail's padding), so the bar
+   hugs the sidebar's left edge, Steam-style. */
+.side-nav-item {
   background: transparent;
-  transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
 }
-.top-tab:hover {
-  background: rgb(255 255 255 / 0.05);
+.side-nav-item:hover {
   color: rgb(228 228 231);
 }
-.top-tab[data-active='true'] {
-  border-color: var(--line);
-  background: var(--surface-2);
-  color: white;
+
+.side-indicator {
+  background: var(--accent);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--accent) 55%, transparent);
 }
 
-/* Console entry: ember outline -> solid on hover (the one loud action). */
-.top-console {
-  border: 1px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  background: color-mix(in oklab, var(--accent) 10%, transparent);
-  transition: background-color 160ms ease-out, border-color 160ms ease-out, box-shadow 160ms ease-out;
-}
-.top-console:hover {
-  border-color: var(--accent);
+/* Console entry: the one loud action — solid ember, brighter + glowing on hover. */
+.side-console {
   background: var(--accent);
-  box-shadow: 0 4px 16px color-mix(in oklab, var(--accent) 30%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    0 2px 10px color-mix(in oklab, var(--accent) 25%, transparent);
+  transition: filter 160ms ease-out, box-shadow 160ms ease-out;
+}
+.side-console:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 18px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+/* Drag-active avatar dropzone (PersonaPicker): ember tint, matching the rail. */
+.dropzone-drag {
+  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
 }
 
 /* ---- Orb accent system (brief §"Accent system") -------------------------- */

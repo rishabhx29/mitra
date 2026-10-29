@@ -5,8 +5,8 @@
 // separate registered window the search window closes with; Mitra keeps it lazy instead).
 import type { BrowserWindowConstructorOptions } from 'electron';
 
-export const SETTINGS_WIDTH = 1100;
-export const SETTINGS_HEIGHT = 760;
+export const SETTINGS_WIDTH = 1200;
+export const SETTINGS_HEIGHT = 800;
 
 export interface SettingsWindowLike {
   show(): void;
@@ -40,7 +40,7 @@ export function createSettingsWindow(deps: SettingsWindowDeps): SettingsWindowLi
   const win = new deps.BrowserWindow({
     width: SETTINGS_WIDTH,
     height: SETTINGS_HEIGHT,
-    minWidth: 900,
+    minWidth: 940,
     minHeight: 640,
     show: false, // shown on ready-to-show to avoid a white flash
     title: 'Mitra Settings',

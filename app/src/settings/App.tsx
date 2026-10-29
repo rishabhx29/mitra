@@ -1,9 +1,9 @@
-// Settings window shell (Task E; UI-polish wave: glass/depth shell per
-// docs/DESIGN_BRIEF.md — orb-color CSS vars drive the radial shell background,
-// the sidebar indicator and every accent). Loads settings over the mitra IPC
-// bridge, hosts the panels, and shows a status.saved toast after each
-// successful save. Outside Electron (plain-browser dev) it degrades to an
-// in-memory fallback so the UI still works — flagged with a local-only hint.
+// Settings window shell (Task E; shell redesign: Steam-client-style LEFT
+// SIDEBAR instead of the launcher top bar — orb-color CSS vars drive the radial
+// shell background, the rail's ember indicator and every accent). Loads settings
+// over the mitra IPC bridge, hosts the panels, and shows a status.saved toast
+// after each successful save. Outside Electron (plain-browser dev) it degrades
+// to an in-memory fallback so the UI still works — flagged with a local-only hint.
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { t } from '../i18n';
@@ -21,7 +21,7 @@ import AssistantPage from './AssistantPage';
 import CapabilitiesPage from './CapabilitiesPage';
 import ActivityPage from './ActivityPage';
 import TranscriptLog from './TranscriptLog';
-import { Icon } from './ui';
+import Sidebar from './Sidebar';
 import type { SectionId, SaveFn } from './types';
 
 const SECTIONS: ReadonlyArray<{ id: SectionId; labelKey: string; icon: string }> = [
@@ -132,71 +132,23 @@ export default function SettingsApp() {
   const panelProps = { settings, tt, save };
 
   return (
-    <div className="mitra-shell relative flex h-full w-full flex-col text-zinc-100" style={orbVars}>
-      {/* Sidebar */}
-      {/* Top bar — launcher-style: brand left, pill tabs, Console right (ref 2). */}
-      <header className="top-bar z-10 flex items-center gap-6 px-6 py-3.5">
-        <div className="flex items-center gap-3">
-          <span
-            className="orb-pulse h-8 w-8 rounded-full"
-            style={{
-              background: `radial-gradient(circle at 32% 28%, ${settings.orbColors.a}, ${settings.orbColors.b} 75%)`,
-              boxShadow: `0 0 14px ${settings.orbColors.b}70`,
-            }}
-          />
-          <div>
-            <div className="text-sm font-semibold tracking-wide text-white">{tt('app.title')}</div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-              {tt('settings.title')}
-            </div>
-          </div>
-        </div>
+    /* Row shell: sidebar rail + content. */
+    <div className="mitra-shell relative flex h-full w-full text-zinc-100" style={orbVars}>
+      {/* Sidebar rail — brand, vertical nav, console CTA, status at the bottom. */}
+      <Sidebar
+        sections={SECTIONS}
+        section={section}
+        onNavigate={setSection}
+        tt={tt}
+        settings={settings}
+        persisted={persisted}
+      />
 
-        <nav className="ml-4 flex items-center gap-1.5" aria-label={tt('settings.title')}>
-          {SECTIONS.map(({ id, labelKey, icon }) => {
-            const active = section === id;
-            return (
-              <button
-                key={id}
-                onClick={() => setSection(id)}
-                aria-current={active ? 'page' : undefined}
-                data-active={active}
-                className={`top-tab focus-orb flex items-center gap-2 rounded-full px-4 py-2 text-sm ${
-                  active ? 'font-medium text-white' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <span style={active ? { color: 'var(--accent)' } : undefined}>
-                  <Icon name={icon} />
-                </span>
-                {tt(labelKey)}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="ml-auto flex items-center gap-3">
-          {!persisted && (
-            <span className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-1.5 text-[11px] text-amber-300">
-              {tt('settings.localOnly')}
-            </span>
-          )}
-          <button
-            data-testid="nav-console"
-            onClick={() => window.mitra?.toggleConsole()}
-            className="top-console focus-orb flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-white"
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-              <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-              <path d="m4.5 6 2.5 2L4.5 10M8.5 10h3" />
-            </svg>
-            {tt('console.open')}
-          </button>
-        </div>
-      </header>
-
-      {/* Content spans full width below the top bar (launcher layout). */}
+      {/* Content: scrollable page area right of the rail. The four wrappers stay
+          MOUNTED (hidden pattern) — TranscriptLog's subscription and every
+          panel's local state depend on it. */}
       <main className="z-10 min-w-0 flex-1 overflow-y-auto">
-        <div className={`mx-auto px-8 py-8 ${section === 'home' ? 'max-w-3xl' : 'max-w-3xl'}`}>
+        <div className="mx-auto max-w-4xl px-10 py-8">
           <div className={section === 'home' ? '' : 'hidden'}>
             {section === 'home' && (
               <HomePanel settings={settings} tt={tt} onNavigate={setSection} />

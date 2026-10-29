@@ -353,7 +353,7 @@ function AvatarSection({
           onDrop={onDrop}
           className={`relative h-64 overflow-hidden rounded-2xl border-2 border-dashed transition-colors duration-150 ${
             dragging
-              ? 'border-sky-400/70 bg-sky-500/10'
+              ? 'dropzone-drag'
               : vrmUrl
                 ? 'border-white/[0.12] bg-white/[0.03]'
                 : 'border-white/[0.14] bg-white/[0.02] hover:border-white/25'
@@ -392,7 +392,13 @@ function AvatarSection({
             </div>
           )}
           {dragging && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-sky-500/10 text-sm font-medium text-sky-200">
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-medium"
+              style={{
+                background: 'color-mix(in oklab, var(--accent) 12%, transparent)',
+                color: 'var(--accent-2)',
+              }}
+            >
               {tt('settings.persona.vrmDropActive')}
             </div>
           )}
@@ -467,7 +473,13 @@ function AvatarSection({
               {license.authors.length > 0 && <div>By {license.authors.join(', ')}</div>}
               {license.copyright && <div>{license.copyright}</div>}
               {license.licenseUrl && (
-                <a href={license.licenseUrl} target="_blank" rel="noreferrer" className="text-sky-400 underline">
+                <a
+                  href={license.licenseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                  style={{ color: 'var(--accent-2)' }}
+                >
                   {license.licenseUrl}
                 </a>
               )}
