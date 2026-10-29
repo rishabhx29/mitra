@@ -4,6 +4,15 @@
 // adapted from amica (MIT) src/features/emoteController/expressionController.ts;
 // loader setup follows @pixiv/three-vrm (MIT) official usage.
 //
+// Idle-life layer (always on, independent of session state and audio): the
+// pure math lives in ./idle (breathing, sway, head bob, randomized
+// double-blink clock). Bone motion is written to the NORMALIZED humanoid rig
+// BEFORE vrm.update() — three-vrm copies normalized → raw bones inside
+// update(), so the pose reaches the visible skeleton the same frame, and the
+// normalized rig's rest pose (identity rotations) makes small absolute writes
+// drift-free. All amplitudes are small enough that the rest-pose bounds
+// measured below for the auto-fit camera stay valid (fit.ts pads by 1.15×).
+//
 // NO bundled model (licensing — research/05 §3/§6): the URL always comes from
 // the user (harness file input / settings). Load failures degrade to
 // `onError` text, never throw.
@@ -15,6 +24,15 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { extractLicenseMeta, type VrmLicenseInfo } from './licenseMeta';
 import { VRM_VISEME_NAMES, type VrmVisemeWeights } from './lipsync';
+import {
+  breathingScale,
+  breathingSpineRad,
+  createBlinkClock,
+  headBob,
+  pickBlinkExpressions,
+  swayOffsets,
+  type BlinkClock,
+} from './idle';
 
 const CLOSED: VrmVisemeWeights = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
 
@@ -40,6 +58,11 @@ export function VrmView({ vrmUrl, weightsRef, onReady, onBounds, onError }: VrmV
   const groupRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
   const [vrm, setVrm] = useState<VRM | null>(null);
+  // Idle-life layer state (per-frame, no React state): which VRM the blink
+  // expression probe ran for, the probed expression names, and the blink clock.
+  const probedVrmRef = useRef<VRM | null>(null);
+  const blinkNamesRef = useRef<string[]>([]);
+  const blinkClockRef = useRef<BlinkClock | null>(null);
   // Keep callbacks fresh for the async loader without reloading the model.
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
@@ -108,16 +131,63 @@ export function VrmView({ vrmUrl, weightsRef, onReady, onBounds, onError }: VrmV
     };
   }, [vrmUrl]);
 
-  // Per-frame: VRM update + smoothed viseme application + auto-blink.
+  // Per-frame: VRM update + always-on idle life + smoothed visemes + blink.
   // (amica ExpressionController pattern: set current weights, update.)
+  // Nothing here is gated on session state or audio — idle motion runs for
+  // every surface (overlay, Console, fullscreen viewer, settings preview);
+  // lip-sync weights simply override the mouth expressions while speaking.
   // R3F re-registers the latest callback per render, so `vrm` state is fresh.
   useFrame((_, rawDelta) => {
     if (!vrm) return;
     const delta = Math.min(0.1, rawDelta);
     timeRef.current += delta;
-    vrm.update(delta);
+    const tMs = timeRef.current * 1000;
 
     const manager = vrm.expressionManager;
+
+    // Probe for a usable blink expression once per model — the name differs
+    // across VRM 0.x ('Blink'), VRM 1.0 ('blink') and fcl-style rigs. An empty
+    // result means this model has no blink morph; blinking is then skipped
+    // silently, never an error.
+    if (probedVrmRef.current !== vrm) {
+      probedVrmRef.current = vrm;
+      blinkNamesRef.current = manager ? pickBlinkExpressions(manager) : [];
+    }
+
+    // --- idle life, part 1: normalized-bone motion (before vrm.update so it
+    // propagates to the raw skeleton on this same frame). ---
+    const humanoid = vrm.humanoid;
+    if (humanoid) {
+      // Breathing: prefer a chest/spine bone; fall back to whole-mesh scale.
+      const breathBone =
+        humanoid.getNormalizedBoneNode('chest') ?? humanoid.getNormalizedBoneNode('spine');
+      if (breathBone) {
+        breathBone.rotation.x = breathingSpineRad(tMs);
+      } else {
+        const s = breathingScale(tMs);
+        vrm.scene.scale.set(s, s, s);
+      }
+      // Head bob so the head is never frozen relative to the swaying body.
+      const head = humanoid.getNormalizedBoneNode('head');
+      if (head) {
+        const bob = headBob(tMs);
+        head.rotation.x = bob.pitchRad;
+        head.rotation.y = bob.yawRad;
+      }
+    }
+
+    vrm.update(delta);
+
+    // --- idle life, part 2: wrapper-group sway (independent of expressions —
+    // deliberately NOT behind any expressionManager check). ---
+    const group = groupRef.current;
+    if (group) {
+      const sway = swayOffsets(tMs);
+      group.position.x = sway.x;
+      group.position.z = sway.z;
+      group.rotation.y = sway.rotY;
+    }
+
     if (!manager) return;
 
     const target = weightsRef.current ?? CLOSED;
@@ -129,16 +199,21 @@ export function VrmView({ vrmUrl, weightsRef, onReady, onBounds, onError }: VrmV
       manager.setValue(name, next);
     }
 
-    // Auto-blink (idea from amica AutoBlink, simplified): a quick 0.14s close
-    // every ~4s. setValue on a missing expression is a no-op in three-vrm.
-    const phase = timeRef.current % 4;
-    const blink = phase < 0.14 ? Math.sin((phase / 0.14) * Math.PI) : 0;
-    manager.setValue('blink', blink);
-
-    // Gentle idle sway on the wrapper group.
-    const group = groupRef.current;
-    if (group) {
-      group.rotation.y = Math.sin(timeRef.current * 0.4) * 0.05;
+    // Blink on the probed expression name(s): a random 2–6s interval, ~15%
+    // double-blinks, 0.14s sine envelope (idle.ts). setValue on a missing
+    // expression is a no-op in three-vrm, but the probe already guarantees a
+    // registered name here.
+    const blinkNames = blinkNamesRef.current;
+    if (blinkNames.length > 0) {
+      let clock = blinkClockRef.current;
+      if (!clock) {
+        clock = createBlinkClock();
+        blinkClockRef.current = clock;
+      }
+      const blink = clock.weightAt(tMs);
+      for (const name of blinkNames) {
+        manager.setValue(name, blink);
+      }
     }
   });
 
