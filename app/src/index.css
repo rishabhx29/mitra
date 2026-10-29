@@ -141,6 +141,39 @@ body,
 }
 
 
+/* ---- Top bar (launcher layout, ref 2): flat, hairline-separated, pill tabs. */
+.top-bar {
+  border-bottom: 1px solid var(--line);
+  background: #141416;
+}
+
+.top-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
+}
+.top-tab:hover {
+  background: rgb(255 255 255 / 0.05);
+  color: rgb(228 228 231);
+}
+.top-tab[data-active='true'] {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: white;
+}
+
+/* Console entry: ember outline -> solid on hover (the one loud action). */
+.top-console {
+  border: 1px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  transition: background-color 160ms ease-out, border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.top-console:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 4px 16px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
 /* ---- Orb accent system (brief §"Accent system") -------------------------- */
 
 .orb-gradient {

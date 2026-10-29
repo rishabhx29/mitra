@@ -134,13 +134,14 @@ export default function SettingsApp() {
   return (
     <div className="mitra-shell relative flex h-full w-full text-zinc-100" style={orbVars}>
       {/* Sidebar */}
-      <aside className="nebula-rail z-10 flex w-60 shrink-0 flex-col">
-        <div className="flex items-center gap-3 px-5 pb-4 pt-5">
+      {/* Top bar — launcher-style: brand left, pill tabs, Console right (ref 2). */}
+      <header className="top-bar z-10 flex items-center gap-6 px-6 py-3.5">
+        <div className="flex items-center gap-3">
           <span
             className="orb-pulse h-8 w-8 rounded-full"
             style={{
               background: `radial-gradient(circle at 32% 28%, ${settings.orbColors.a}, ${settings.orbColors.b} 75%)`,
-              boxShadow: `0 0 18px ${settings.orbColors.b}90, 0 0 42px ${settings.orbColors.a}40`,
+              boxShadow: `0 0 14px ${settings.orbColors.b}70`,
             }}
           />
           <div>
@@ -150,8 +151,8 @@ export default function SettingsApp() {
             </div>
           </div>
         </div>
-        <div className="nebula-brand-line mx-5 mb-4" aria-hidden="true" />
-        <nav className="stagger flex-1 space-y-1.5 px-3" aria-label={tt('settings.title')}>
+
+        <nav className="ml-4 flex items-center gap-1.5" aria-label={tt('settings.title')}>
           {SECTIONS.map(({ id, labelKey, icon }) => {
             const active = section === id;
             return (
@@ -160,20 +161,10 @@ export default function SettingsApp() {
                 onClick={() => setSection(id)}
                 aria-current={active ? 'page' : undefined}
                 data-active={active}
-                className={`nebula-nav-item focus-orb relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm ${
-                  active ? 'font-medium text-white' : 'text-zinc-400'
+                className={`top-tab focus-orb flex items-center gap-2 rounded-full px-4 py-2 text-sm ${
+                  active ? 'font-medium text-white' : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                {active && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full"
-                    style={{
-                      background: 'var(--accent)',
-                      boxShadow: '0 0 10px color-mix(in oklab, var(--accent) 55%, transparent)',
-                    }}
-                  />
-                )}
                 <span style={active ? { color: 'var(--accent)' } : undefined}>
                   <Icon name={icon} />
                 </span>
@@ -182,22 +173,30 @@ export default function SettingsApp() {
             );
           })}
         </nav>
-        {!persisted && (
-          <p className="mx-3 mb-3 rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-[11px] leading-snug text-amber-300">
-            {tt('settings.localOnly')}
-          </p>
-        )}
-      </aside>
 
-      {/* Content */}
-      <main className="z-10 min-w-0 flex-1 overflow-y-auto">
-        <div className={`mx-auto px-8 py-8 ${section === 'home' ? 'max-w-3xl' : 'max-w-2xl'}`}>
-          {section !== 'home' && (
-            <h2 className="mb-6 text-lg font-semibold text-zinc-50">
-              {tt(SECTIONS.find((s) => s.id === section)?.labelKey ?? 'settings.title')}
-            </h2>
+        <div className="ml-auto flex items-center gap-3">
+          {!persisted && (
+            <span className="rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-1.5 text-[11px] text-amber-300">
+              {tt('settings.localOnly')}
+            </span>
           )}
+          <button
+            data-testid="nav-console"
+            onClick={() => window.mitra?.toggleConsole()}
+            className="top-console focus-orb flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+              <path d="m4.5 6 2.5 2L4.5 10M8.5 10h3" />
+            </svg>
+            {tt('console.open')}
+          </button>
+        </div>
+      </header>
 
+      {/* Content spans full width below the top bar (launcher layout). */}
+      <main className="z-10 min-w-0 flex-1 overflow-y-auto">
+        <div className={`mx-auto px-8 py-8 ${section === 'home' ? 'max-w-3xl' : 'max-w-3xl'}`}>
           <div className={section === 'home' ? '' : 'hidden'}>
             {section === 'home' && (
               <HomePanel settings={settings} tt={tt} onNavigate={setSection} />
@@ -211,8 +210,6 @@ export default function SettingsApp() {
           </div>
           {/* TranscriptLog stays mounted (subscription lives) — ActivityPage
               provides the page chrome, App supplies the single log instance. */}
-          {/* Always mounted (subscription must capture events before the user
-              opens this page); hidden via the wrapper like the other pages. */}
           <div className={section === 'activity' ? '' : 'hidden'}>
             <ActivityPage tt={tt}>
               <TranscriptLog tt={tt} visible={section === 'activity'} />
