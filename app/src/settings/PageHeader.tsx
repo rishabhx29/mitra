@@ -21,7 +21,7 @@ export function PageHeader({
           aria-hidden="true"
           className="mt-1 font-mono text-2xl font-semibold text-transparent"
           style={{
-            backgroundImage: 'linear-gradient(135deg, var(--orb-a), var(--orb-b))',
+            backgroundImage: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
           }}

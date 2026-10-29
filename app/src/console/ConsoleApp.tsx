@@ -232,6 +232,8 @@ export default function ConsoleApp() {
   const orbVars = {
     '--orb-a': settings.orbColors.a,
     '--orb-b': settings.orbColors.b,
+    '--accent': settings.orbColors.a,
+    '--accent-2': settings.orbColors.b,
   } as CSSProperties;
 
   return (

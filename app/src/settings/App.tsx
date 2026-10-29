@@ -169,12 +169,12 @@ export default function SettingsApp() {
                     aria-hidden="true"
                     className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full"
                     style={{
-                      background: 'linear-gradient(180deg, var(--orb-a), var(--orb-b))',
-                      boxShadow: '0 0 10px color-mix(in oklab, var(--orb-a) 60%, transparent)',
+                      background: 'var(--accent)',
+                      boxShadow: '0 0 10px color-mix(in oklab, var(--accent) 55%, transparent)',
                     }}
                   />
                 )}
-                <span style={active ? { color: 'var(--orb-a)', filter: 'drop-shadow(0 0 6px color-mix(in oklab, var(--orb-a) 55%, transparent))' } : undefined}>
+                <span style={active ? { color: 'var(--accent)' } : undefined}>
                   <Icon name={icon} />
                 </span>
                 {tt(labelKey)}
