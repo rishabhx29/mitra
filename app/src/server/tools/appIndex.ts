@@ -15,6 +15,13 @@ export interface AppEntry {
   key: string;
 }
 
+/** The once-built Start-Menu index (entries + lookup maps). */
+export interface AppIndex {
+  entries: AppEntry[];
+  byKey: Map<string, AppEntry>;
+  byCompact: Map<string, AppEntry>;
+}
+
 export interface FsLike {
   existsSync(path: string): boolean;
   readdirSync(path: string, opts: { withFileTypes: true }): Array<{ name: string; isDirectory(): boolean }>;
@@ -63,7 +70,7 @@ function collectLnks(fs: FsLike, dir: string, depth: number, out: string[]): voi
 export function buildAppIndex(
   dirs: string[],
   fs: FsLike = defaultAppFs,
-): { entries: AppEntry[]; byKey: Map<string, AppEntry> } {
+): AppIndex {
   const lnks: string[] = [];
   for (const dir of dirs) collectLnks(fs, dir, 0, lnks);
   const entries: AppEntry[] = lnks.map((path) => {
@@ -71,7 +78,12 @@ export function buildAppIndex(
     return { name, path, key: normalizeName(name) };
   });
   const byKey = new Map(entries.map((e) => [e.key, e]));
-  return { entries, byKey };
+  return { entries, byKey, byCompact: new Map(entries.map((e) => [compactKey(e.key), e])) };
+}
+
+/** Compact key: normalizeName with ALL spaces dropped — "WorkBuddy AI" and "work buddy" both → "workbuddyai"/"workbuddy". */
+export function compactKey(normalized: string): string {
+  return normalized.replace(/\s+/g, '');
 }
 
 /**
@@ -79,16 +91,26 @@ export function buildAppIndex(
  * containment. Returns matches ordered by score; empty when nothing plausible.
  */
 export function matchApp(
-  index: { entries: AppEntry[]; byKey: Map<string, AppEntry> },
+  index: AppIndex,
   query: string,
 ): AppEntry[] {
   const q = normalizeName(query);
   if (!q) return [];
   const exact = index.byKey.get(q);
   if (exact) return [exact];
+  // Space-insensitive tier: "work buddy" must find "WorkBuddy AI" — compare
+  // compact (space-dropped) keys with the same startsWith/contains tiers.
+  const cq = compactKey(q);
+  const compactExact = index.byCompact.get(cq);
+  if (compactExact) return [compactExact];
   const scored = index.entries
     .map((e) => {
-      if (e.key.startsWith(q)) return { e, score: 3 - e.key.length / 100 };
+      const ck = compactKey(e.key);
+      if (ck.startsWith(cq)) return { e, score: 3 - ck.length / 100 };
+      if (cq.startsWith(ck) && ck.length >= 3) return { e, score: 2 };
+      if (ck.includes(cq)) return { e, score: 1 };
+      // Keep the space-aware tiers too (they win on word-boundary quality).
+      if (e.key.startsWith(q)) return { e, score: 2.5 - e.key.length / 100 };
       if (q.startsWith(e.key) && e.key.length >= 3) return { e, score: 2 };
       if (e.key.includes(q)) return { e, score: 1 };
       return null;

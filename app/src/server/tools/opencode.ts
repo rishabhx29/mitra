@@ -4,6 +4,7 @@
 // (plan Review Focus #3 — judges' machines may not have opencode). All spawn/exec/lookup
 // adapters are injected so vitest stubs them.
 import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import type { ToolOutcome } from './notion';
 import { createDefaultExec, type ExecLike } from './launcher';
@@ -27,6 +28,8 @@ export interface OpencodeSpawnResult {
   stderr: string;
   /** True when the run was killed by the timeout. */
   timedOut: boolean;
+  /** True when the idle-after-text early stop resolved the run. */
+  earlyStopped?: boolean;
 }
 
 export type OpencodeSpawnRunner = (opts: OpencodeSpawnOptions) => Promise<OpencodeSpawnResult>;
@@ -104,36 +107,145 @@ function winQuote(arg: string): string {
 }
 
 /**
- * Default spawn adapter: child_process.spawn with a hard timeout. On Windows, npm shims
- * are .cmd/.bat files which modern Node refuses to spawn without a shell — those get
- * shell:true with per-arg quoting (limitation: cmd.exe escaping is best-effort).
+ * Extract the target an npm .cmd shim wraps. Shims look like either:
+ *   node  "%~dp0\node_modules\<pkg>\bin\tool" %*      (node script)
+ *   "%dp0%\node_modules\@scope\cli\bin\tool.exe"  %*  (native binary)
+ * Returns the absolute target path, or null when nothing plausible is found
+ * (the caller then falls back to the buffered shell:true path).
  */
+export function nodeScriptFromShim(shimPath: string, text: string): string | null {
+  const re = /"(?:%~dp0|%dp0%)(\\[^"\r\n]+?)"?\s*%/g;
+  const dir = shimPath.slice(0, Math.max(shimPath.lastIndexOf('\\'), shimPath.lastIndexOf('/')));
+  for (const m of text.matchAll(re)) {
+    if (!m[1]) continue;
+    const target = `${dir}${m[1]}`;
+    if (/\.(exe|js|mjs|cjs)$/i.test(target) && existsSync(target)) return target;
+  }
+  return null;
+}
+
+/**
+ * Default spawn adapter: child_process.spawn with a hard timeout.
+ *
+ * VERIFIED LIVE: through `shell:true` (required for npm .cmd shims), cmd.exe
+ * buffers the child's entire stdout until the process dies — the answer lands
+ * at the ~2-minute timeout instead of the ~3s it actually took, so no idle
+ * stop can ever see it. For .cmd shims we therefore PARSE the shim and spawn
+ * its node script directly (ELECTRON_RUN_AS_NODE turns Electron's own binary
+ * into a plain node): output streams, and the text-part idle stop fires. Any
+ * parse/read failure falls back to the buffered shell:true path. Non-Windows
+ * spawns directly.
+ */
+export const OPENCODE_FINISH_IDLE_MS = 12_000;
+
 export function createDefaultOpencodeSpawn(platform: string): OpencodeSpawnRunner {
-  return (opts) =>
-    new Promise<OpencodeSpawnResult>((resolve) => {
-      const needsShell = platform === 'win32' && /\.(cmd|bat)$/i.test(opts.binPath);
-      const child = spawn(
-        opts.binPath,
-        needsShell ? opts.args.map(winQuote) : opts.args,
-        { cwd: opts.cwd, timeout: opts.timeoutMs, windowsHide: true, shell: needsShell },
-      );
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-      child.stdout?.on('data', (chunk: unknown) => {
-        if (stdout.length < OUTPUT_TAIL_CHARS) stdout += String(chunk);
+  return (opts) => {
+    if (platform === 'win32' && /\.(cmd|bat)$/i.test(opts.binPath)) {
+      try {
+        const text = readFileSync(opts.binPath, 'utf-8');
+        const target = nodeScriptFromShim(opts.binPath, text);
+        if (target && /\.(exe)$/i.test(target)) {
+          // Native binary wrapped by the shim — spawn it directly so stdout
+          // streams (shell:true buffers everything until process death).
+          return spawnDirect(target, opts.args, opts);
+        }
+        if (target) {
+          // Node script wrapped by the shim — Electron's own binary as node.
+          return spawnDirect(
+            process.execPath,
+            [target, ...opts.args],
+            opts,
+            { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+          );
+        }
+      } catch {
+        /* unreadable shim → buffered shell fallback below */
+      }
+      return new Promise<OpencodeSpawnResult>((resolve) => {
+        const child = spawn(opts.binPath, opts.args.map(winQuote), {
+          cwd: opts.cwd,
+          timeout: opts.timeoutMs,
+          windowsHide: true,
+          shell: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        wireStream(child, resolve);
       });
-      child.stderr?.on('data', (chunk: unknown) => {
-        if (stderr.length < OUTPUT_TAIL_CHARS) stderr += String(chunk);
-      });
-      child.on('error', (err: Error) => {
-        resolve({ code: null, stdout, stderr: stderr || err.message, timedOut });
-      });
-      child.on('close', (code, signal) => {
-        if (signal) timedOut = true;
-        resolve({ code, stdout, stderr, timedOut });
-      });
+    }
+    return spawnDirect(opts.binPath, opts.args, opts);
+  };
+}
+
+interface DirectSpawnOpts {
+  cwd?: string;
+  timeoutMs: number;
+}
+
+function spawnDirect(
+  bin: string,
+  args: string[],
+  opts: DirectSpawnOpts,
+  env?: NodeJS.ProcessEnv,
+): Promise<OpencodeSpawnResult> {
+  return new Promise<OpencodeSpawnResult>((resolve) => {
+    const child = spawn(bin, args, {
+      cwd: opts.cwd,
+      timeout: opts.timeoutMs,
+      windowsHide: true,
+      // stdin MUST be ignored: opencode stalls forever waiting on an open
+      // (never-written) stdin pipe — verified live, exit in ~5s with 'ignore'.
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(env ? { env } : {}),
     });
+    wireStream(child, resolve);
+  });
+}
+
+function wireStream(
+  child: ReturnType<typeof spawn>,
+  resolve: (r: OpencodeSpawnResult) => void,
+): void {
+  let stdout = '';
+  let stderr = '';
+  let timedOut = false;
+  let settled = false;
+  let lastTextEndedAt = 0;
+  // Events can split across pipe chunks — scan a rolling window of recent
+  // output instead of individual chunks (capped so memory stays bounded).
+  const SCAN_KEEP = 8_000;
+  let scanBuf = '';
+  const finish = (result: OpencodeSpawnResult) => {
+    if (settled) return;
+    settled = true;
+    clearInterval(idleTimer);
+    resolve(result);
+  };
+  const idleTimer = setInterval(() => {
+    if (lastTextEndedAt === 0 || settled) return;
+    if (Date.now() - lastTextEndedAt >= OPENCODE_FINISH_IDLE_MS) {
+      child.kill();
+      finish({ code: 0, stdout, stderr, timedOut: false, earlyStopped: true });
+    }
+  }, 1_000);
+  child.stdout?.on('data', (chunk: unknown) => {
+    const text = String(chunk);
+    scanBuf = (scanBuf + text).slice(-SCAN_KEEP);
+    // A text part carrying time.end means the model finished that message.
+    if (scanBuf.includes('"type":"text"') && scanBuf.includes('"end":')) {
+      lastTextEndedAt = Date.now();
+    }
+    if (stdout.length < OUTPUT_TAIL_CHARS) stdout += text;
+  });
+  child.stderr?.on('data', (chunk: unknown) => {
+    if (stderr.length < OUTPUT_TAIL_CHARS) stderr += String(chunk);
+  });
+  child.on('error', (err: Error) => {
+    finish({ code: null, stdout, stderr: stderr || err.message, timedOut });
+  });
+  child.on('close', (code, signal) => {
+    if (signal) timedOut = true;
+    finish({ code, stdout, stderr, timedOut });
+  });
 }
 
 async function simulate(

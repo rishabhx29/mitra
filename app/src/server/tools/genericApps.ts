@@ -2,11 +2,11 @@
 // (docs/DECISION_TIER_PLAN.md §2b): any installed app via the Start-Menu index,
 // graceful close, and web search. Exec/opener injected for vitest.
 import type { ToolOutcome } from './notion';
-import { exeGuess, matchApp, type AppEntry } from './appIndex';
+import { exeGuess, matchApp, type AppEntry, type AppIndex } from './appIndex';
 import type { ExecLike } from './launcher';
 
 export interface OpenAnyAppDeps {
-  index: { entries: AppEntry[]; byKey: Map<string, AppEntry> };
+  index: AppIndex;
   exec: ExecLike;
   /** settings.apps alias names for the "did you mean one of these" hint. */
   aliasNames: string[];

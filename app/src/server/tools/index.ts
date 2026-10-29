@@ -19,7 +19,7 @@ import { createMemoryTool } from './memory';
 import { createStatusBriefingTool, type OsLike, type PowerMonitorLike } from './status';
 import { createNoteNotepadTool } from './notepad';
 import { openAnyApp, closeApp, webSearch } from './genericApps';
-import { buildAppIndex, matchApp, type AppEntry } from './appIndex';
+import { buildAppIndex, matchApp, type AppEntry, type AppIndex } from './appIndex';
 import { createYoutubeSearchTool } from './youtube';
 import { createAgendaTodayTool } from './agenda';
 import type { MockNotionFileAdapter } from '../mockNotion';
@@ -99,7 +99,7 @@ interface SharedToolState {
   reminders: ReminderService;
   memory: MemoryStore;
   /** §2b Start-Menu app index (lazy, once per dispatcher; refreshed on a miss). */
-  appIndex?: { entries: AppEntry[]; byKey: Map<string, AppEntry> };
+  appIndex?: AppIndex;
 }
 
 function buildHandler(
