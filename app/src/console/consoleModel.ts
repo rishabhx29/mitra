@@ -227,11 +227,12 @@ function fmt(template: string, vars: Record<string, string>): string {
 
 /**
  * Tool count for the boot line, kept in one place: the ToolName union in
- * src/shared/types.ts has 13 members (10 base + the 3 real-world tools from
- * docs/DECISION_TIER_PLAN.md §2). (No client-side tool registry exists —
+ * src/shared/types.ts has 14 members (10 base + the 3 real-world tools from
+ * docs/DECISION_TIER_PLAN.md §2 + app_task, which opens an app AND types the
+ * requested content into it). (No client-side tool registry exists —
  * the authoritative list lives behind the bridge's isKnownTool.)
  */
-export const TOOL_COUNT = 13;
+export const TOOL_COUNT = 14;
 
 export function buildBootLines(status: BrainStatus, lang: Lang): string[] {
   const brainLabel =
@@ -266,7 +267,7 @@ export function buildBootLines(status: BrainStatus, lang: Lang): string[] {
 export const HINT_CHIPS: ReadonlyArray<{ key: string }> = [
   { key: 'console.hint.tool' }, // tool intent: "add chai to my todo list"
   { key: 'console.hint.hinglish' }, // Hinglish: "notepad kholo"
-  { key: 'console.hint.question' }, // no intent → brain chat: "who are you?"
+  { key: 'console.hint.question' }, // identity intent → self-intro: "who are you?"
 ];
 
 // ---------------------------------------------------------------------------
@@ -288,7 +289,11 @@ export interface ConsoleDeps {
   getWorkspaceModes?: () => WorkspaceMode[];
   /** Recent turns for /api/brain/chat (the caller builds it from the thread). */
   history?: ChatMessage[];
-  /** /api/brain/chat timeout (default 8000ms — plan: 8s → fallback to mock). */
+  /**
+   * /api/brain/chat timeout (default 20000ms — must cover the local brain's
+   * cold start; brain.BRAIN_CHAT_TIMEOUT_MS uses the same 20s budget so the
+   * client never gives up before the bridge's own fallback does).
+   */
   chatTimeoutMs?: number;
   /** /api/brain/route timeout (default 1500ms — the fast path stays fast). */
   routeTimeoutMs?: number;
@@ -419,7 +424,7 @@ export async function runSubmit(text: string, dispatch: Dispatch, deps: ConsoleD
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages, language: lang }),
-        signal: AbortSignal.timeout(deps.chatTimeoutMs ?? 8000),
+        signal: AbortSignal.timeout(deps.chatTimeoutMs ?? 20000),
       });
       const body = (await res.json().catch(() => null)) as ChatBody | null;
       const reply =
@@ -442,13 +447,15 @@ export async function runSubmit(text: string, dispatch: Dispatch, deps: ConsoleD
     return;
   }
 
-  // ---- stop / language_switch: conversational intents with no tool ---------
+  // ---- stop / language_switch / identity: conversational intents, no tool --
   const mapped = intentToTool(intent);
   if (!mapped) {
     const agentText =
       intent.kind === 'language_switch'
         ? t(intent.language, `voice.langSwitched.${intent.language}`)
-        : t(lang, 'voice.stopReply');
+        : intent.kind === 'identity'
+          ? t(lang, 'voice.identityReply')
+          : t(lang, 'voice.stopReply');
     finishAgent(dispatch, idFactory, now, agentText);
     return;
   }

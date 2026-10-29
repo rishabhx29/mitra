@@ -16,6 +16,7 @@ import {
   YOUTUBE_ARG_RES,
   extractUrl,
   normalizeUtterance,
+  parseAppTask,
   parseLaunchAlias,
   parseReminder,
 } from '../voice/intents';
@@ -38,6 +39,7 @@ export const LAYA_TOOL_OPTIONS: readonly string[] = [
   'youtube_search',
   'agenda_today',
   'launch_app',
+  'app_task',
   'run_opencode_task',
   'open_url',
   'reminder',
@@ -59,6 +61,7 @@ export const LAYA_TOOL_CRITERIA: Readonly<Record<string, string>> = {
   youtube_search: 'user wants to open youtube and search or play something',
   agenda_today: 'user asks what is due or scheduled today',
   launch_app: 'user wants to open an application',
+  app_task: 'open an app AND write/type specific content into it (notepad, etc.)',
   run_opencode_task: 'user wants the opencode coding agent to build something',
   open_url: 'user wants to open a website',
   reminder: 'user wants a reminder or timer',
@@ -77,6 +80,7 @@ const LAYA_CHOICE_TO_TOOL: Readonly<Record<string, ToolName>> = {
   youtube_search: 'youtube_search',
   agenda_today: 'agenda_today',
   launch_app: 'launch_app',
+  app_task: 'app_task',
   run_opencode_task: 'run_opencode_task',
   open_url: 'open_url',
   reminder: 'set_reminder',
@@ -289,6 +293,12 @@ export function pickArgs(tool: ToolName, text: string): Record<string, unknown> 
     case 'launch_app': {
       const alias = parseLaunchAlias(norm);
       return alias ? { alias } : null;
+    }
+    case 'app_task': {
+      // The opencode composite routes to run_opencode_task deterministically,
+      // so only plain app_task composites parameterize here.
+      const task = parseAppTask(norm);
+      return task && task.kind === 'app_task' ? { app: task.app, content: task.content } : null;
     }
     case 'open_url': {
       const url = extractUrl(norm);

@@ -158,6 +158,8 @@ export const en: Record<string, string> = {
     'Hi, I am Mitra. Try "add milk to my list", "open notepad", or "open opencode and build a snake game".',
   'voice.clarify':
     "Sorry, I didn't catch that. You can ask me to add a to-do, open an app, open a link, or run an opencode task.",
+  'voice.identityReply':
+    "I'm Mitra — your local desktop assistant. I can run tools (to-dos, apps, links, notes, opencode) and chat. Try 'add chai to my todo list' or 'open notepad and write hello'.",
   'voice.stopReply': 'Okay, closing. Press the hotkey anytime you need me.',
   'voice.langSwitched.hi': 'ठीक है, अब मैं हिंदी में बात करूँगा।',
   'voice.langSwitched.en': 'Sure — back to English.',

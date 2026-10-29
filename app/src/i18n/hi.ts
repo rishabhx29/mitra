@@ -158,6 +158,8 @@ export const hi: Record<string, string> = {
     'नमस्ते, मैं मित्र हूँ। बोलिए — "मेरी लिस्ट में दूध जोड़ो", "notepad खोलो", या "open opencode and build a snake game"।',
   'voice.clarify':
     'माफ़ कीजिए, समझ नहीं आया। आप टू-डू जोड़ने, ऐप खोलने, लिंक खोलने या opencode टास्क के लिए कह सकते हैं।',
+  'voice.identityReply':
+    'मैं मित्र हूँ — आपका लोकल डेस्कटॉप असिस्टेंट। मैं टूल्स चला सकता हूँ (टू-डू, ऐप्स, लिंक, नोट्स, opencode) और बात भी कर सकता हूँ। आज़माएँ — "add chai to my todo list" या "open notepad and write hello"।',
   'voice.stopReply': 'ठीक है, बंद कर रहा हूँ। ज़रूरत हो तो हॉटकी दबाकर बुला लीजिए।',
   'voice.langSwitched.hi': 'ठीक है, अब मैं हिंदी में बात करूँगा।',
   'voice.langSwitched.en': 'ज़रूर — अब मैं अंग्रेज़ी में बात करूँगा।',

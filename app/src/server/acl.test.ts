@@ -28,6 +28,8 @@ const TOOL_GATE_CASES: Array<[ToolName, PermissionGate]> = [
   ['open_any_app', 'launcher'],
   ['close_app', 'launcher'],
   ['web_search', 'browser'],
+  // app_task opens an app (launch_app semantics) and types into it → launcher.
+  ['app_task', 'launcher'],
 ];
 
 const GATELESS_TOOLS: ToolName[] = ['status_briefing'];
@@ -56,6 +58,7 @@ describe('TOOL_GATES mapping (plan Task C + ULTRON_PORT rows)', () => {
         'open_any_app',
         'close_app',
         'web_search',
+        'app_task',
       ].sort(),
     );
   });

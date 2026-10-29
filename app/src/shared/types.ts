@@ -24,7 +24,10 @@ export type ToolName =
   // General app control (docs/DECISION_TIER_PLAN.md §2b): ANY installed app + web search.
   | 'open_any_app'
   | 'close_app'
-  | 'web_search';
+  | 'web_search'
+  // Composite app task: open an app AND write/type specific content into it
+  // ("open notepad and write hello") — launch + clipboard paste (win32).
+  | 'app_task';
 
 export interface ToolRequest {
   id: string;

@@ -9,6 +9,7 @@ import { createMemoryMockNotion, type MockNotion } from '../mockNotion';
 import { createMemoryStore, type MemoryStore } from '../memory';
 import { createNotionAddTodoTool, type FetchLike } from './notion';
 import { createLaunchAppTool, type ExecLike } from './launcher';
+import { createAppTaskTool } from './appTask';
 import { createOpencodeTool, type OpencodeLookup, type OpencodeSpawnRunner } from './opencode';
 import { createOpenUrlTool, type UrlOpener } from './url';
 import { createWorkspaceModeTool } from './workspace';
@@ -41,6 +42,8 @@ export const KNOWN_TOOLS: readonly ToolName[] = [
   'note_notepad',
   'youtube_search',
   'agenda_today',
+  // Composite: open an app AND type content into it (voice intents.ts app_task).
+  'app_task',
 ];
 
 export function isKnownTool(name: string): name is ToolName {
@@ -115,6 +118,17 @@ function buildHandler(
       });
     case 'launch_app':
       return createLaunchAppTool({ apps: deps.settings().apps, exec: deps.exec, appIndexDirs: deps.appIndexDirs, appFs: deps.appFs });
+    case 'app_task':
+      // Same resolution deps as launch_app (alias → Start-Menu index → shell);
+      // the tool then types the content (win32 clipboard + SendKeys).
+      return createAppTaskTool({
+        apps: deps.settings().apps,
+        exec: deps.exec,
+        appIndexDirs: deps.appIndexDirs,
+        appFs: deps.appFs,
+        platform,
+        delay: deps.delay,
+      });
     case 'run_opencode_task':
       return createOpencodeTool({
         lookup: deps.opencodeLookup,

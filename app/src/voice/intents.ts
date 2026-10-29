@@ -33,6 +33,13 @@ const LANG_HI_RE =
 const LANG_EN_RE =
   /\b(?:speak|talk)\s+(?:in\s+)?english\b|\bab\s+(?:se\s+)?english\b|\benglish\b\s*(?:me(?:in)?)?\s*(?:bolo|bol|baat)\b|अंग्रेज़?ी\s*(?:में)?\s*(?:बोलो|बात करो)/;
 
+// 2b) identity — "who are you" / "what can you do" / "tum kaun ho" (+ Devanagari).
+//     Checked EARLY (right after stop/language) so the console's own hint chip
+//     ("who are you?") always gets a real self-introduction instead of the
+//     clarify fallback when the chat brain is slow or absent.
+const IDENTITY_RE =
+  /\b(?:who\s+are\s+you|what\s+can\s+you\s+do|what(?:'s|\s+is)\s+your\s+name|tum\s+kaun\s+ho|aap\s+kaun\s+ho|tumhara\s+naam|aapka\s+naam)\b|तुम\s*कौन\s*हो|आप\s*कौन\s*हो|तुम्हारा\s*नाम|आपका\s*नाम/;
+
 // 3) opencode task — BEFORE launch-app so "open opencode and build …" routes to the tool.
 const OPENCODE_RES: RegExp[] = [
   /^open\s+opencode\s+(?:and|aur|or|phir|then)?\s*(?:please\s+)?(?:build|design|deso|make|banao|bana|likho|run|chalu|chala)\b[\s:,-]*(.+)$/,
@@ -66,6 +73,51 @@ const LAUNCH_RES: RegExp[] = [
   /^खोल(?:ो)?\s+(.+)$/,
   /^(.+?)\s+चालू करो$/,
 ];
+
+// 6b) app_task — open an app AND write/type specific content into it ("open
+//     notepad and write hello", "msword me note likho", "vscode kholo aur X
+//     likho"). Checked AFTER note_notepad/add-todo (so bare "note down X" /
+//     "X daalo" keep their own tools) and just BEFORE launch_app (which would
+//     otherwise swallow the whole composite as a mangled alias). Every shape
+//     must yield BOTH an app token and a >2-char content remainder — a bare
+//     "open notepad" falls through to launch_app unchanged. Named groups keep
+//     the content-first table row readable.
+export const APP_TASK_RES: RegExp[] = [
+  // en composite: "open notepad and write hello" / "launch calc, type 2+2"
+  /^(?:open|launch|start)\s+(?<app>.{1,40}?)\s*(?:,|\s+(?:and|aur|then|phir)\s+)\s*(?:write|type|note|add|paste|put|enter)\s+(?<content>.+)$/,
+  // en content-first: "write hello into mspaint" (notepad variants stay note_notepad)
+  /^(?:write|type|note|put)\s+(?<content>.+?)\s+(?:in|into|on|to)\s+(?<app>.{1,40}?)$/,
+  // Hinglish app-first: "msword me note likho" (the notepad variant = note_notepad)
+  /^(?<app>.{1,40}?)\s*(?:mein|me|main)\s*(?<content>.+?)\s*(?:likho|likh\s+do|type\s+karo|daalo|daal\s+do|add\s+karo)$/,
+  // Hinglish kholo composite: "vscode kholo aur hello world likho"
+  /^(?<app>.{1,40}?)\s+kholo\s*(?:aur|and)?\s*(?<content>.+?)\s*(?:likho|likh\s+do|type\s+karo)$/,
+];
+
+/** App tokens that route to their own richer tool instead of plain app_task. */
+const OPENCODE_APP_RE = /^opencode$/;
+
+/**
+ * Parse an app_task composite ("open notepad and write hello") into its app +
+ * content, or null when no shape matches / the content is too short to be a
+ * real task (≤2 chars → the caller falls through, eventually to launch_app).
+ * An opencode app token returns the existing opencode_task intent so the
+ * composite runs run_opencode_task (which already knows how to drive it).
+ * Exported for the bridge router's pickArgs (Laya names the tool, regexes
+ * parameterize it — same contract as the other shared parsers).
+ */
+export function parseAppTask(text: string): MockIntent | null {
+  for (const re of APP_TASK_RES) {
+    const m = re.exec(text);
+    if (!m || !m.groups) continue;
+    const app = cleanupCapture((m.groups['app'] ?? '').replace(/^(?:the|a|an|mera|meri|apna)\s+/, ''));
+    // Trim trailing punctuation from the content; require a real task (>2 chars).
+    const content = cleanupCapture((m.groups['content'] ?? '').replace(/[.,!?;:"'’।]+$/, ''));
+    if (!app || content.length <= 2) continue;
+    if (OPENCODE_APP_RE.test(app.toLowerCase())) return { kind: 'opencode_task', prompt: content };
+    return { kind: 'app_task', app, content };
+  }
+  return null;
+}
 
 // 7) set_reminder — Ultron port rows 2–3 (clean-room phrasing). Minutes-only
 //    scope per the ledger; Devanagari digits are mapped to ASCII first and
@@ -356,9 +408,10 @@ export function parseLaunchAlias(text: string): string | null {
 /**
  * Parse one utterance into a MockIntent, or null when nothing matched
  * (the caller replies with a friendly clarification instead).
- * Checks run in priority order: stop → language → opencode → note_notepad →
- * add-todo → youtube_search → agenda_today → reminder → memory → lock →
- * status → url → workspace-mode → launch-app.
+ * Checks run in priority order: stop → language → identity → opencode →
+ * note_notepad → add-todo → youtube_search → agenda_today → reminder → memory
+ * → lock → status → url → workspace-mode → web → well-known-site → app_task →
+ * launch-app.
  * Specific tools beat the broad alias match (so "remind me to study in 10
  * minutes" stays a reminder even when a mode aliases "study"), and a URL
  * beats a mode whose alias shares the domain ("open movie.com" stays a link).
@@ -372,6 +425,10 @@ export function parseIntent(raw: string, modes: WorkspaceMode[] = []): MockInten
 
   if (LANG_HI_RE.test(text)) return { kind: 'language_switch', language: 'hi' };
   if (LANG_EN_RE.test(text)) return { kind: 'language_switch', language: 'en' };
+
+  // Identity questions answer conversationally (no tool) — before everything
+  // else so the console hint chip never degrades to the clarify fallback.
+  if (IDENTITY_RE.test(text)) return { kind: 'identity' };
 
   const oc = firstCapture(text, OPENCODE_RES);
   if (oc) return { kind: 'opencode_task', prompt: oc };
@@ -423,6 +480,13 @@ export function parseIntent(raw: string, modes: WorkspaceMode[] = []): MockInten
   const site = matchWellKnownSite(text);
   if (site) return { kind: 'open_url', url: site };
 
+  // app_task just BEFORE launch_app: "open notepad and write hello" must TYPE
+  // the text, not open Notepad with a mangled "notepad and write hello" alias.
+  // It needs BOTH an app token and a >2-char remainder, so a bare "open
+  // notepad" falls through to launch_app exactly as before.
+  const appTask = parseAppTask(text);
+  if (appTask) return appTask;
+
   const app = parseLaunchAlias(text);
   if (app) return { kind: 'launch_app', alias: app };
 
@@ -446,6 +510,11 @@ export function intentToTool(
       return { tool: 'notion_add_todo', args: { text: intent.text } };
     case 'launch_app':
       return { tool: 'launch_app', args: { alias: intent.alias } };
+    case 'app_task':
+      return { tool: 'app_task', args: { app: intent.app, content: intent.content } };
+    case 'identity':
+      // Conversational — answered from i18n by the caller (like stop/language).
+      return null;
     case 'open_any_app':
       return { tool: 'open_any_app', args: { name: intent.name } };
     case 'close_app':

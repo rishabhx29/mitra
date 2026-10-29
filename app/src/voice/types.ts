@@ -38,6 +38,10 @@ export type MockIntent =
   | { kind: 'open_any_app'; name: string }
   | { kind: 'close_app'; name: string }
   | { kind: 'web_search'; query: string }
+  // Composite task: open an app AND put content into it ("open notepad and write hello").
+  | { kind: 'app_task'; app: string; content: string }
+  // Identity question ("who are you?") — answered conversationally, no tool.
+  | { kind: 'identity' }
   | { kind: 'stop' }
   | { kind: 'language_switch'; language: 'en' | 'hi' };
 

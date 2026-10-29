@@ -35,6 +35,8 @@ export const TOOL_GATES: Readonly<Record<ToolName, ToolGate>> = {
   note_notepad: 'launcher',
   youtube_search: 'browser',
   agenda_today: 'notion',
+  // app_task opens an app (launch_app semantics) and types into it → launcher.
+  app_task: 'launcher',
   // §2b general app control: machine-side actions → launcher; web → browser.
   open_any_app: 'launcher',
   close_app: 'launcher',

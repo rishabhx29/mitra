@@ -25,6 +25,7 @@ import { failureReply, fetchRouteDecision, intentToTool, parseIntent } from './i
 // imports keep working (the class below is the only DOM-typed code here).
 export {
   AGENDA_RES,
+  APP_TASK_RES,
   NOTE_ARG_RES,
   YOUTUBE_ARG_RES,
   failureReply,
@@ -32,6 +33,7 @@ export {
   intentToTool,
   matchWorkspaceMode,
   normalizeUtterance,
+  parseAppTask,
   parseIntent,
   parseLaunchAlias,
   parseReminder,
@@ -176,6 +178,11 @@ export class MockProvider implements VoiceProvider, MockVoiceProviderExtras {
       this.language = intent.language;
       // Confirm in the NEW language so the user hears the switch took effect.
       await this.speak(t(intent.language, `voice.langSwitched.${intent.language}`));
+      return;
+    }
+    if (intent.kind === 'identity') {
+      // Self-introduction — no tool, no chat round-trip needed.
+      await this.speak(t(this.language, 'voice.identityReply'));
       return;
     }
 

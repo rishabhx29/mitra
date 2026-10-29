@@ -265,7 +265,7 @@ describe('runSubmit — chat + non-tool intents', () => {
     );
     const history = [{ role: 'assistant' as const, content: 'Welcome.' }];
     const actions = collector();
-    await runSubmit('who are you?', (a) => actions.push(a), {
+    await runSubmit('tell me a joke', (a) => actions.push(a), {
       ...baseDeps,
       fetchImpl: fetch,
       history,
@@ -277,7 +277,7 @@ describe('runSubmit — chat + non-tool intents', () => {
     // chat LLM is spent.
     expect(log).toHaveLength(2);
     expect(log[0].url).toBe('http://127.0.0.1:8765/api/brain/route');
-    expect(JSON.parse(String(log[0].init?.body))).toEqual({ text: 'who are you?' });
+    expect(JSON.parse(String(log[0].init?.body))).toEqual({ text: 'tell me a joke' });
     expect(log[1].url).toBe('http://127.0.0.1:8765/api/brain/chat');
     const body = JSON.parse(String(log[1].init?.body)) as {
       messages: Array<{ role: string; content: string }>;
@@ -286,7 +286,7 @@ describe('runSubmit — chat + non-tool intents', () => {
     expect(body.language).toBe('en');
     // history first, current utterance last:
     expect(body.messages[0]).toEqual({ role: 'assistant', content: 'Welcome.' });
-    expect(body.messages[body.messages.length - 1]).toEqual({ role: 'user', content: 'who are you?' });
+    expect(body.messages[body.messages.length - 1]).toEqual({ role: 'user', content: 'tell me a joke' });
 
     const agent = lastAction(actions);
     if (agent.type === 'agent-line') expect(agent.text).toBe('I am Mitra, your assistant.');
@@ -342,7 +342,7 @@ describe('runSubmit — chat + non-tool intents', () => {
   it('no intent + chat endpoint missing (404) → mock clarify fallback (zero local models still works)', async () => {
     const { fetch } = fakeFetch(() => jsonResponse({ ok: false, summary: 'Not Found' }, 404));
     const actions = collector();
-    await runSubmit('who are you?', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
+    await runSubmit('tell me a joke', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
     const agent = lastAction(actions);
     if (agent.type === 'agent-line') {
       expect(agent.text).toBe(t('en', 'voice.clarify'));
@@ -355,10 +355,25 @@ describe('runSubmit — chat + non-tool intents', () => {
       throw new Error('offline');
     });
     const actions = collector();
-    await runSubmit('who are you?', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
+    await runSubmit('tell me a joke', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
     const agent = lastAction(actions);
     if (agent.type === 'agent-line') expect(agent.text).toBe(t('en', 'voice.clarify'));
     else throw new Error('expected agent-line');
+  });
+
+  it('identity intent ("who are you?") → self-intro agent line, no fetch, no tool card', async () => {
+    const { fetch, log } = fakeFetch(() => {
+      throw new Error('no network expected for the local identity answer');
+    });
+    const actions = collector();
+    await runSubmit('who are you?', (a) => actions.push(a), { ...baseDeps, fetchImpl: fetch });
+    expect(log).toHaveLength(0); // answered locally — no route, no chat round-trip
+    expect(actions.some((a) => a.type === 'tool-result')).toBe(false);
+    const agent = lastAction(actions);
+    if (agent.type === 'agent-line') {
+      expect(agent.text).toBe(t('en', 'voice.identityReply'));
+      expect(agent.speakUntil).toBe(FIXED_NOW() + speakDurationMs(agent.text));
+    } else throw new Error('expected agent-line');
   });
 
   it('stop intent → goodbye agent line, no tool card', async () => {
@@ -550,10 +565,10 @@ describe('HINT_CHIPS', () => {
     }
   });
 
-  it('question chip has NO intent in en AND hi (→ brain chat)', () => {
+  it('question chip parses to the identity intent in en AND hi (→ local self-intro, not clarify)', () => {
     const key = 'console.hint.question';
     for (const lang of ['en', 'hi'] as const) {
-      expect(parseIntent(t(lang, key), [])).toBeNull();
+      expect(parseIntent(t(lang, key), [])).toMatchObject({ kind: 'identity' });
     }
   });
 
@@ -561,6 +576,6 @@ describe('HINT_CHIPS', () => {
     const modes = DEFAULT_SETTINGS.workspaceModes ?? [];
     expect(parseIntent(t('en', 'console.hint.tool'), modes)).toMatchObject({ kind: 'add_todo' });
     expect(parseIntent(t('en', 'console.hint.hinglish'), modes)).toMatchObject({ kind: 'launch_app' });
-    expect(parseIntent(t('en', 'console.hint.question'), modes)).toBeNull();
+    expect(parseIntent(t('en', 'console.hint.question'), modes)).toMatchObject({ kind: 'identity' });
   });
 });

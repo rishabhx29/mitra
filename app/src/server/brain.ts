@@ -13,8 +13,12 @@ import type { FetchResponseLike } from './tools/notion';
 export const OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
 /** Detection budget (GET /api/tags) — must be cheap, the status bar polls it. */
 export const BRAIN_DETECT_TIMEOUT_MS = 1500;
-/** Generation budget (POST /api/generate); past it we answer from the mock brain. */
-export const BRAIN_CHAT_TIMEOUT_MS = 8000;
+/**
+ * Generation budget (POST /api/generate); past it we answer from the mock brain.
+ * 20s, not 8s: qwen2.5:3b cold-start on 8GB routinely exceeds 8s, which used to
+ * turn real chat turns into the useless clarify fallback.
+ */
+export const BRAIN_CHAT_TIMEOUT_MS = 20_000;
 
 export type BrainKind = 'ollama' | 'mock';
 
@@ -216,7 +220,8 @@ export function buildToolSystemPrompt(language: 'en' | 'hi', tools: readonly str
     catalog +
     '.\nIf the user\'s latest message maps to one of them, reply with ONLY one line of strict JSON, no prose, no code fence:' +
     '\n{"tool":"<tool-name>","args":{...}}' +
-    '\nChoose args that fit the tool (e.g. notion_add_todo takes {"text":"..."}; launch_app takes {"alias":"app name"}; open_url takes {"url":"..."}; youtube_search takes {"query":"..."}; web_search takes {"query":"..."}; run_opencode_task takes {"prompt":"..."}; open_any_app/close_app take {"name":"app name"}; set_reminder takes {"minutes":N,"text":"..."}; workspace_mode takes {"name":"coding|gaming|study|chill"}).' +
+    '\nChoose args that fit the tool (e.g. notion_add_todo takes {"text":"..."}; launch_app takes {"alias":"app name"}; app_task takes {"app":"notepad","content":"..."}; open_url takes {"url":"..."}; youtube_search takes {"query":"..."}; web_search takes {"query":"..."}; run_opencode_task takes {"prompt":"..."}; open_any_app/close_app take {"name":"app name"}; set_reminder takes {"minutes":N,"text":"..."}; workspace_mode takes {"name":"coding|gaming|study|chill"}).' +
+    '\nComposite requests: "open <app> and write/type <content>" must use app_task (or run_opencode_task when the app is opencode) — NEVER launch_app.' +
     '\nIf no tool fits, or information is missing, answer conversationally instead.'
   );
 }
