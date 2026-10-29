@@ -25,17 +25,26 @@ export interface VrmViewProps {
   weightsRef: RefObject<VrmVisemeWeights>;
   /** Called with extracted embedded license meta after a successful load (null if none). */
   onReady?: (license: VrmLicenseInfo | null) => void;
+  /**
+   * Called once per successful load with the model's world-space bounding box
+   * (measured after VRM transforms are applied), or null on load failure /
+   * unload — lets the host auto-fit its camera to ANY model scale. Once per
+   * load, never per frame.
+   */
+  onBounds?: (bounds: THREE.Box3 | null) => void;
   /** Called with a human-readable message on load failure. */
   onError?: (message: string) => void;
 }
 
-export function VrmView({ vrmUrl, weightsRef, onReady, onError }: VrmViewProps) {
+export function VrmView({ vrmUrl, weightsRef, onReady, onBounds, onError }: VrmViewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
   const [vrm, setVrm] = useState<VRM | null>(null);
   // Keep callbacks fresh for the async loader without reloading the model.
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onBoundsRef = useRef(onBounds);
+  onBoundsRef.current = onBounds;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
@@ -56,6 +65,7 @@ export function VrmView({ vrmUrl, weightsRef, onReady, onError }: VrmViewProps) 
         if (cancelled) return;
         const next = gltf.userData.vrm as VRM | undefined;
         if (!next) {
+          onBoundsRef.current?.(null);
           onErrorRef.current?.('File loaded but contains no VRM model (.vrm expected).');
           return;
         }
@@ -71,10 +81,19 @@ export function VrmView({ vrmUrl, weightsRef, onReady, onError }: VrmViewProps) 
         });
         setVrm(next);
         onReadyRef.current?.(extractLicenseMeta(next.meta));
+        // Measure world-space bounds once, after all VRM transforms are applied
+        // (rotateVRM0's root rotation, culling/skeleton changes). The scene is
+        // not mounted yet, so force its matrix chain first; Box3.setFromObject
+        // then bakes each node's matrixWorld into the box. Null when the scene
+        // yields nothing frameable — the host keeps its fallback camera.
+        next.scene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(next.scene);
+        onBoundsRef.current?.(box.isEmpty() ? null : box);
       },
       undefined,
       (err) => {
         if (cancelled) return;
+        onBoundsRef.current?.(null);
         const message = err instanceof Error ? err.message : 'Failed to load .vrm file.';
         onErrorRef.current?.(message);
       },
@@ -82,6 +101,7 @@ export function VrmView({ vrmUrl, weightsRef, onReady, onError }: VrmViewProps) 
 
     return () => {
       cancelled = true;
+      onBoundsRef.current?.(null); // model unloading — clear stale bounds
       if (loaded) {
         VRMUtils.deepDispose(loaded.scene);
       }

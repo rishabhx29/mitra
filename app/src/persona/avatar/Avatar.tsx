@@ -9,11 +9,13 @@
 // viseme-capable models degrade to text / amplitude fallback, never throw.
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { PerspectiveCamera, type Box3 } from 'three';
 import { Lipsync } from 'wawa-lipsync';
 import type { SessionState } from '../../shared/types';
 import { VrmView } from './VrmView';
+import { computeFullFrameCamera } from './fit';
 import {
   amplitudeMouthWeights,
   visemeToVrmWeights,
@@ -53,6 +55,18 @@ export interface AvatarProps {
   onLicense?: (info: VrmLicenseInfo | null) => void;
 }
 
+/** Latest measured model bounds + a version bumped on every report (swap/unload). */
+interface ModelBounds {
+  box: Box3 | null;
+  version: number;
+}
+
+/** Structural slice of drei's OrbitControls used for best-effort target sync. */
+interface ControlsLike {
+  target: { set: (x: number, y: number, z: number) => void };
+  update: () => unknown;
+}
+
 export function Avatar({
   vrmUrl,
   state = 'idle',
@@ -68,6 +82,8 @@ export function Avatar({
   const weightsRef = useRef<VrmVisemeWeights>({ ...CLOSED_MOUTH });
   const [error, setError] = useState<string | null>(null);
   const [license, setLicense] = useState<VrmLicenseInfo | null>(null);
+  const boundsRef = useRef<ModelBounds>({ box: null, version: 0 });
+  const boundsVersionRef = useRef(0);
 
   const showLicense = licenseVisible && vrmUrl !== null;
 
@@ -80,6 +96,11 @@ export function Avatar({
         // the default camera at (0,0,0) — the model's feet — unless a
         // `rotation` is passed (verified in @react-three/fiber events module:
         // "Always look at center by default ... unless cameraOptions.rotation").
+        //
+        // For framing='full' these hardcoded values are only the pre-load
+        // fallback: once VrmView reports the model's bounds, FullFrameCamera
+        // refits position + look-at to the actual bbox, so ANY model
+        // scale/height lands fully in frame.
         camera={
           orbit
             ? { position: [0, 1.15, 2.8], fov: 35 }
@@ -104,6 +125,7 @@ export function Avatar({
           audioEl={audioEl}
           weightsRef={weightsRef}
         />
+        <FullFrameCamera boundsRef={boundsRef} enabled={framing === 'full'} />
         <VrmView
           vrmUrl={vrmUrl}
           weightsRef={weightsRef}
@@ -111,6 +133,10 @@ export function Avatar({
             setLicense(info);
             setError(null);
             onLicense?.(info);
+          }}
+          onBounds={(box) => {
+            boundsVersionRef.current += 1;
+            boundsRef.current = { box, version: boundsVersionRef.current };
           }}
           onError={setError}
         />
@@ -133,6 +159,73 @@ export function Avatar({
       {showLicense && <AvatarLicensePanel info={license} />}
     </div>
   );
+}
+
+/**
+ * In-canvas null component: when `enabled` (framing='full') and VrmView has
+ * reported the loaded model's world-space bounds, refits the camera to the
+ * model via computeFullFrameCamera — position on the bbox centre's +z axis,
+ * look-at at the centre — so ANY model scale/height lands fully in frame.
+ *
+ * Applies once per bounds version and again on canvas resize (aspect change)
+ * and when framing toggles back to 'full'. Until bounds arrive (and for
+ * degenerate bounds) it does nothing, so the Canvas's hardcoded full camera
+ * always stands first — there is never a flash of nothing. With OrbitControls
+ * mounted (orbit mode), it also best-effort pivots the controls' target to the
+ * model centre; orbiting itself is untouched. framing='close' never enables it.
+ */
+function FullFrameCamera({
+  boundsRef,
+  enabled,
+}: {
+  boundsRef: RefObject<ModelBounds>;
+  enabled: boolean;
+}) {
+  const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+  const controls = useThree((s) => s.controls) as unknown as ControlsLike | null;
+  const appliedRef = useRef<{ version: number; aspect: number } | null>(null);
+  const wasEnabledRef = useRef(false);
+
+  useFrame(() => {
+    const wasEnabled = wasEnabledRef.current;
+    wasEnabledRef.current = enabled;
+    if (!enabled) return;
+
+    const { box, version } = boundsRef.current;
+    if (!box) return; // nothing measured (yet / unload) — hardcoded fallback stands
+
+    const aspect = size.height > 0 ? size.width / size.height : 1;
+    const applied = appliedRef.current;
+    // Re-arm on re-enable (R3F resets the camera when the `camera` prop changes
+    // with framing) and on aspect change (resize) — not per frame otherwise.
+    if (
+      wasEnabled &&
+      applied &&
+      applied.version === version &&
+      Math.abs(applied.aspect - aspect) < 1e-9
+    ) {
+      return;
+    }
+
+    // The fit math is perspective-specific; leave any other camera untouched.
+    if (!(camera instanceof PerspectiveCamera)) return;
+    const fit = computeFullFrameCamera(box, camera.fov, aspect);
+    appliedRef.current = { version, aspect };
+    if (!fit) return;
+
+    camera.position.set(fit.position[0], fit.position[1], fit.position[2]);
+    camera.lookAt(fit.target[0], fit.target[1], fit.target[2]);
+    camera.updateProjectionMatrix();
+
+    // Best-effort: pivot the orbit controls around the model centre too.
+    if (controls && typeof controls.update === 'function' && controls.target) {
+      controls.target.set(fit.target[0], fit.target[1], fit.target[2]);
+      controls.update();
+    }
+  });
+
+  return null;
 }
 
 /**
