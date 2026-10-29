@@ -243,7 +243,8 @@ test('settings window opens and renders the permissions UI', async () => {
   await expect(settingsPage.getByText('Mitra Settings')).toBeVisible();
   // Open the ACL panel and see the four gates (PermissionsPanel, Task E).
   await settingsPage.getByRole('button', { name: 'Capabilities' }).click();
-  await expect(settingsPage.getByText('Terminal & opencode')).toBeVisible();
+  // The gate name appears in BOTH the toggle row and the tool-matrix chip now.
+  await expect(settingsPage.getByText('Terminal & opencode').first()).toBeVisible();
 });
 
 test('overlay summons via the e2e toggle hook and Escape dismisses', async () => {
@@ -291,23 +292,14 @@ test('the mock Notion board carries the new item (GET /api/notion/items)', async
 });
 
 test('terminal permission off → opencode intent gets the permission-denied reply', async () => {
-  // Flip the terminal gate through the settings window's preload IPC — the same
-  // mitra:setSettings path the PermissionsPanel toggles use.
-  const next = await settingsPage!.evaluate(async () => {
-    const mitra = (window as unknown as {
-      mitra: { setSettings(patch: unknown): Promise<{ permissions: { terminal: boolean } }> };
-    }).mitra;
-    return mitra.setSettings({
-      permissions: { notion: true, launcher: true, terminal: false, browser: true },
-    });
-  });
-  expect(next.permissions.terminal).toBe(false);
-  // Re-open the permissions panel first — test 4 left the settings window on the
-  // Conversation log section, and role queries skip display:none subtrees.
+  // Flip the terminal gate through the settings window's REAL toggle path
+  // (PermissionsPanel switch → save()) so React state and the store both move.
   await settingsPage!.getByRole('button', { name: 'Capabilities' }).click();
-  await expect(
-    settingsPage!.getByRole('switch', { name: 'Terminal & opencode' }),
-  ).toHaveAttribute('aria-checked', 'false');
+  const terminalSwitch = settingsPage!.getByRole('switch', { name: 'Terminal & opencode' });
+  if ((await terminalSwitch.getAttribute('aria-checked')) !== 'false') {
+    await terminalSwitch.click();
+  }
+  await expect(terminalSwitch).toHaveAttribute('aria-checked', 'false');
 
   // The 12s listening-no-speech timeout (docs/DESIGN_BRIEF.md) may have already
   // stopped test 4's session and auto-dismissed the overlay while this test was

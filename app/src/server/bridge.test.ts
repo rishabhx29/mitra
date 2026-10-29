@@ -211,6 +211,52 @@ describe('POST /api/tools/:name', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ ok: false, summary: 'Invalid JSON body' });
   });
+
+  // Activity log (ADDITIVE): one hook call per COMPLETED execution — allowed
+  // runs report their ToolResult, ACL denials at the HTTP edge never execute
+  // and therefore never report.
+  it('onToolExecuted fires once per completed execution and never for a 403 denial', async () => {
+    const executed: Array<{ tool: string; ok: boolean; summary: string }> = [];
+    const h = await start({
+      settings: () => makeSettings({ permissions: { notion: true, launcher: false, terminal: true, browser: true } }),
+      executeTool: async (req) => ({ id: req.id, ok: true, summary: `ran ${req.tool}` }),
+      onToolExecuted: (tool, result) => {
+        executed.push({ tool, ok: result.ok, summary: result.summary });
+      },
+    });
+    // Denied at the HTTP edge → nothing executes → no hook call.
+    const denied = await fetch(`http://127.0.0.1:${h.port}/api/tools/launch_app`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'd1', args: {} }),
+    });
+    expect(denied.status).toBe(403);
+    // Allowed → executes → exactly one hook call carrying the result.
+    const allowed = await fetch(`http://127.0.0.1:${h.port}/api/tools/notion_add_todo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 't9', args: { text: 'milk' } }),
+    });
+    expect(allowed.status).toBe(200);
+    expect(executed).toEqual([{ tool: 'notion_add_todo', ok: true, summary: 'ran notion_add_todo' }]);
+  });
+
+  it('onToolExecuted survives a throwing sink (tool still answers, never throws)', async () => {
+    const h = await start({
+      settings: () => DEFAULT_SETTINGS,
+      executeTool: async (req) => ({ id: req.id, ok: true, summary: 'fine' }),
+      onToolExecuted: () => {
+        throw new Error('sink exploded');
+      },
+    });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/tools/notion_add_todo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 't10', args: { text: 'milk' } }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json())['summary']).toBe('fine');
+  });
 });
 
 describe('GET /api/notion/items (Task E: settings board view)', () => {

@@ -202,6 +202,40 @@ export const hi: Record<string, string> = {
   'page.capabilities.apps': 'ऐप एलियास',
   'page.capabilities.modes': 'वर्कस्पेस मोड',
   'page.capabilities.integrations': 'इंटीग्रेशन',
+  // ---- टूल मैट्रिक्स (क्षमताएँ §2.1): हर चलने योग्य टूल अपने गेट के नीचे ----
+  'page.capabilities.toolMatrix': 'टूल मैट्रिक्स',
+  'page.capabilities.toolMatrix.desc':
+    'मित्र हर वह टूल चला सकता है जो यहाँ अनुमति के अनुसार बँटा है। काटा हुआ चिप यानी वह गेट बंद है — उसके टूल लॉक रहेंगे।',
+  'page.capabilities.toolMatrix.count': '{n} टूल',
+  'page.capabilities.toolMatrix.gateNone': 'अनुमति ज़रूरी नहीं',
+  'page.capabilities.toolMatrix.alwaysAllowed': 'हमेशा स्वीकृत',
+  'page.capabilities.gates.desc':
+    'ऊपर वाले मैट्रिक्स के मास्टर स्विच — एक गेट चालू कीजिए, उसके टूल तुरंत खुल जाएँगे।',
+  'page.capabilities.apps.desc':
+    'बोलने लायक छोटे नाम — “launch spotify” इन्हीं एलियास से पहचाना जाता है।',
+  'page.capabilities.modes.desc':
+    'एक उच्चारण में पूरा पैकेज — ऐप्स और लिंक एक साथ।',
+  'page.capabilities.integrations.desc':
+    'मित्र आपके काम और स्मृति यहीं रखता है।',
+  // हर टूल की एक-पंक्ति विवरण (keys shared/toolGates.ts से मेल खाती हैं)।
+  'tool.notion_add_todo.desc': 'आपकी नोशन टू-डू सूची में काम जोड़ता है।',
+  'tool.launch_app.desc': 'लॉन्चर एलियास खोलता है — notepad, terminal या आपका अपना।',
+  'tool.run_opencode_task.desc': 'कोडिंग का काम टर्मिनल में opencode एजेंट को सौंपता है।',
+  'tool.open_url.desc': 'डिफ़ॉल्ट ब्राउज़र में लिंक खोलता है।',
+  'tool.workspace_mode.desc': 'वर्कस्पेस प्रीसेट पर स्विच करता है — ऐप्स और लिंक एक साथ।',
+  'tool.set_reminder.desc': 'रिमाइंडर सेट करता है जो डेस्कटॉप नोटिफिकेशन दिखाता है।',
+  'tool.list_reminders.desc': 'आपके सक्रिय रिमाइंडर सुनाता है।',
+  'tool.lock_workstation.desc': 'इस कंप्यूटर को तुरंत लॉक कर देता है।',
+  'tool.memory.desc': 'सत्रों के बीच बातें याद रखता, सुनाता या भुलाता है।',
+  'tool.status_briefing.desc': 'बैटरी, अपटाइम और सिस्टम स्थिति बताता है।',
+  'tool.note_notepad.desc': 'टाइमस्टैम्प के साथ नोट फ़ाइल में लिखकर नोटपैड खोलता है।',
+  'tool.youtube_search.desc': 'YouTube पर खोजकर रिज़ल्ट पेज खोलता है।',
+  'tool.agenda_today.desc': 'आज के काम टू-डो बोर्ड से पढ़ता है।',
+  'tool.open_any_app.desc': 'इस मशीन पर इंस्टॉल कोई भी ऐप ढूँढकर खोलता है।',
+  'tool.close_app.desc': 'चल रहे ऐप की विंडो बंद करता है।',
+  'tool.web_search.desc': 'ब्राउज़र में वेब सर्च करता है।',
+  'tool.app_task.desc': 'ऐप खोलकर उसमें आपका दिया हुआ टेक्स्ट टाइप करता है।',
+  'settings.micro.tools': 'सूची',
   'page.activity.title': 'गतिविधि',
   'page.activity.desc': 'मित्र ने क्या सुना, क्या जवाब दिया और क्या चलाया — लाइव।',
   // Card micro-labels (uppercase eyebrow above each card title)

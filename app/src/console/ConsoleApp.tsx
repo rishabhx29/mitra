@@ -27,6 +27,7 @@ import {
   fetchBrainStatus,
   initialConsoleState,
   runSubmit,
+  type ConsoleAction,
 } from './consoleModel';
 import { Thread } from './Thread';
 
@@ -165,32 +166,56 @@ export default function ConsoleApp() {
   }, []);
 
   // ---- submit → the consoleModel pipeline (intent→tool / brain chat) ----
+  // reportDispatch wraps the reducer dispatch so every Console chat line ALSO
+  // lands in the settings window's Activity log (mitra:report-transcript):
+  //   - user submits → {role:'user'}, agent replies → {role:'agent'}
+  //   (the TranscriptEntry roles from shared/types — exactly what main's
+  //   parseTranscriptEntry accepts and transcriptModel's eventToRow renders).
+  // Tool cards are deliberately NOT reported here: tool executions are
+  // reported by the bridge-level onToolExecuted hook in main, so reporting
+  // them here too would create double Activity rows.
+  const reportDispatch = useCallback((action: ConsoleAction): void => {
+    dispatch(action);
+    if (action.type !== 'submit' && action.type !== 'agent-line') return;
+    try {
+      const mitra = getMitra(); // null in plain-browser dev / vitest — nothing to report to
+      if (!mitra) return;
+      mitra.reportTranscript({
+        role: action.type === 'submit' ? 'user' : 'agent',
+        text: action.text,
+        ts: action.ts,
+      });
+    } catch {
+      /* reporting must never break the console */
+    }
+  }, []);
+
   const onSubmit = useCallback(
     (e: FormEvent): void => {
       e.preventDefault();
       const text = input.trim();
       if (!text || stateRef.current.typing) return;
       setInput('');
-      void runSubmit(text, dispatch, {
+      void runSubmit(text, reportDispatch, {
         lang,
         getWorkspaceModes: () => modesRef.current,
         // History = turns BEFORE this submit (runSubmit appends the utterance itself).
         history: buildChatHistory(stateRef.current.entries),
       });
     },
-    [input, lang],
+    [input, lang, reportDispatch],
   );
 
   const onChip = useCallback(
     (text: string): void => {
       if (stateRef.current.typing) return;
-      void runSubmit(text, dispatch, {
+      void runSubmit(text, reportDispatch, {
         lang,
         getWorkspaceModes: () => modesRef.current,
         history: buildChatHistory(stateRef.current.entries),
       });
     },
-    [lang],
+    [lang, reportDispatch],
   );
 
   // ---- mic: summon the voice overlay (preload method may be absent — guarded) ----

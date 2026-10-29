@@ -85,6 +85,14 @@ export interface BridgeDeps {
   /** Absolute notes file for note_notepad (main injects <userData>/mitra-notes.txt). */
   notesPath?: string;
   onProgress?: (tool: ToolName, msg: string) => void;
+  /**
+   * ADDITIVE (Activity log): called once per COMPLETED tool execution with its
+   * ToolResult — whatever the entry path (/api/tools/:name, brain-chat tools).
+   * Main injects a sink that reports every run to the settings window's
+   * Activity log from ONE place; the call site wraps the sink in try/catch so
+   * a broken reporter can never break a tool.
+   */
+  onToolExecuted?: (tool: ToolName, result: ToolResult) => void;
   log?: (msg: string) => void;
 }
 
@@ -156,6 +164,22 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       onProgress: deps.onProgress,
     });
   const log = deps.log ?? (() => {});
+
+  // Every completed execution flows through this wrapper (the /api/tools route
+  // AND the brain-chat executeTool callback both call it), so one optional hook
+  // sees every bridge tool run — voice, Console and brain-initiated alike.
+  // Never throws, never alters the result.
+  const executeToolWithHook = async (req: ToolRequest): Promise<ToolResult> => {
+    const result = await executeTool(req);
+    if (deps.onToolExecuted) {
+      try {
+        deps.onToolExecuted(req.tool, result);
+      } catch (err) {
+        log(`onToolExecuted sink failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return result;
+  };
 
   // ---- Console brain routes (docs/CONSOLE_PLAN.md "Architecture deltas" item 2) ----
   // The brain rides the SAME injected fetchImpl as the session mint / tools, so
@@ -234,7 +258,7 @@ export function createBridgeApp(deps: BridgeDeps): Express {
         fetchImpl,
         preferredModel: settings().console?.model?.trim() || undefined,
         executeTool: async (tool, args) => {
-        const out = await executeTool({ id: `brain-${Date.now()}`, tool: tool as ToolName, args });
+        const out = await executeToolWithHook({ id: `brain-${Date.now()}`, tool: tool as ToolName, args });
         return { ok: out.ok, summary: out.summary };
       },
       toolNames: KNOWN_TOOLS,
@@ -406,7 +430,7 @@ export function createBridgeApp(deps: BridgeDeps): Express {
         return;
       }
 
-      const result = await executeTool({ id, tool: name, args });
+      const result = await executeToolWithHook({ id, tool: name, args });
       console.log(`[mitra:DEBUG] tool=${name} executeTool resolved`);
       res.json(result);
     } catch (err) {

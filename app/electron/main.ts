@@ -247,6 +247,17 @@ function bootstrap(): void {
       overlay.sendSessionEvent(event); // overlay circle system note
       sendToSettings(event); // settings Conversation log tool row
     },
+    // Activity log (ADDITIVE): every COMPLETED bridge tool execution — voice,
+    // Console or brain-chat initiated — lands in the settings Conversation log
+    // as one tool row. Single reporting point: the Console reports only its
+    // chat lines (no double tool rows), and the overlay already narrates the
+    // result as an agent reply, so this sink feeds the settings window only.
+    onToolExecuted: (tool, result) => {
+      sendToSettings({
+        kind: 'tool-result',
+        result: { ok: result.ok, summary: result.summary || tool },
+      });
+    },
   }).catch((err: unknown) => {
     // Mock-mode-first: the app stays fully usable without the bridge.
     console.warn('[mitra:bridge] failed to start:', err);

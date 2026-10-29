@@ -228,6 +228,40 @@ export const en: Record<string, string> = {
   'page.capabilities.apps': 'App aliases',
   'page.capabilities.modes': 'Workspace modes',
   'page.capabilities.integrations': 'Integrations',
+  // ---- Tool matrix (Capabilities §2.1): every executable tool under its gate ----
+  'page.capabilities.toolMatrix': 'Tool matrix',
+  'page.capabilities.toolMatrix.desc':
+    'Every tool Mitra can execute, grouped by the permission that unlocks it. A struck chip means that gate is off — its tools stay locked.',
+  'page.capabilities.toolMatrix.count': '{n} tools',
+  'page.capabilities.toolMatrix.gateNone': 'No permission needed',
+  'page.capabilities.toolMatrix.alwaysAllowed': 'always allowed',
+  'page.capabilities.gates.desc':
+    'The master switches behind the matrix above — flip a gate on and its tools unlock instantly.',
+  'page.capabilities.apps.desc':
+    'Short names you can say out loud — “launch spotify” resolves through these aliases.',
+  'page.capabilities.modes.desc':
+    'One utterance opens a whole bundle — apps and links together.',
+  'page.capabilities.integrations.desc':
+    'Where Mitra keeps your tasks and long-term memory.',
+  // One-line human description per tool (keys mirror shared/toolGates.ts).
+  'tool.notion_add_todo.desc': 'Add a to-do item to your Notion to-do list.',
+  'tool.launch_app.desc': 'Open a launcher alias — notepad, terminal, or your own.',
+  'tool.run_opencode_task.desc': 'Hand a coding task to the opencode agent in the terminal.',
+  'tool.open_url.desc': 'Open a link in your default browser.',
+  'tool.workspace_mode.desc': 'Switch into a workspace preset — apps and links in one go.',
+  'tool.set_reminder.desc': 'Set a reminder that pops a desktop notification.',
+  'tool.list_reminders.desc': 'Read back your active reminders.',
+  'tool.lock_workstation.desc': 'Lock this computer immediately.',
+  'tool.memory.desc': 'Remember, recall or forget facts between sessions.',
+  'tool.status_briefing.desc': 'Report battery, uptime and system status.',
+  'tool.note_notepad.desc': 'Write a timestamped note to a local file and open Notepad.',
+  'tool.youtube_search.desc': 'Search YouTube and open the results page.',
+  'tool.agenda_today.desc': 'Read today’s items off your to-do board.',
+  'tool.open_any_app.desc': 'Find and open any app installed on this machine.',
+  'tool.close_app.desc': 'Close a running app window.',
+  'tool.web_search.desc': 'Search the web in your browser.',
+  'tool.app_task.desc': 'Open an app AND type your content into it.',
+  'settings.micro.tools': 'Inventory',
   'page.activity.title': 'Activity',
   'page.activity.desc': 'Everything Mitra heard, replied and executed — live.',
   // Card micro-labels (uppercase eyebrow above each card title)
