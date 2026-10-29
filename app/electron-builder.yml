@@ -22,9 +22,14 @@ files:
 asar: true
 
 win:
-  # Portable single-exe target — the buildathon demo artifact. Unsigned on purpose:
-  # no code-signing certificate is configured; SmartScreen may warn on first run.
+  # Two artifacts: the portable single-exe (buildathon demo) AND the NSIS setup
+  # installer (share + install with Start-Menu/desktop shortcuts). Unsigned on
+  # purpose: no code-signing certificate is configured; SmartScreen may warn on
+  # first run — "More info → Run anyway".
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: portable
       arch:
         - x64
@@ -32,9 +37,11 @@ win:
 portable:
   artifactName: ${productName}-${version}-portable-${arch}.${ext}
 
-# Optional NSIS installer extra (not built by `npm run dist`; run explicitly with
-# `npx electron-builder --win nsis` after uncommenting):
-# nsis:
-#   oneClick: true
-#   perMachine: false
-#   artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false # wizard with a install-location page (feels like a real installer)
+  perMachine: false # per-user: no admin prompt
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Mitra
+  artifactName: ${productName}-Setup-${version}.${ext}
