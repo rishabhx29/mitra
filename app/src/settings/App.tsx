@@ -132,7 +132,7 @@ export default function SettingsApp() {
   const panelProps = { settings, tt, save };
 
   return (
-    <div className="mitra-shell relative flex h-full w-full text-zinc-100" style={orbVars}>
+    <div className="mitra-shell relative flex h-full w-full flex-col text-zinc-100" style={orbVars}>
       {/* Sidebar */}
       {/* Top bar — launcher-style: brand left, pill tabs, Console right (ref 2). */}
       <header className="top-bar z-10 flex items-center gap-6 px-6 py-3.5">
@@ -183,7 +183,7 @@ export default function SettingsApp() {
           <button
             data-testid="nav-console"
             onClick={() => window.mitra?.toggleConsole()}
-            className="top-console focus-orb flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white"
+            className="top-console focus-orb flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-white"
           >
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
               <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
