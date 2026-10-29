@@ -341,6 +341,7 @@ export function SessionController({ settings, devMode = false }: SessionControll
             colors={settings.orbColors}
             amplitudeRef={driveRef}
             vrmUrl={vrmUrl}
+            licenseVisible={false}
           />
         </div>
 
