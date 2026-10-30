@@ -32,7 +32,7 @@ import {
   type LayaFetchLike,
   type RouteDecision,
 } from './router';
-import { intentToTool, parseIntent } from '../voice/intents';
+import { bareSearchQuery, intentToTool, parseIntent } from '../voice/intents';
 
 export const DEFAULT_BRIDGE_HOST = '127.0.0.1';
 export const DEFAULT_BRIDGE_PORT = 8765;
@@ -300,12 +300,29 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       }
       const decision = await routeViaLaya(text, { fetchImpl: layaFetch, layaUrl, timeoutMs: routeTimeoutMs });
       if (!decision.tool) {
+        // Sidecar down (fresh boot — laya-serve is not a service) or it passed:
+        // bare "search X" is pickArgs-only while Laya is UP (it may prefer
+        // youtube_search), but dropping the utterance to chat when it is DOWN
+        // made spoken searches do nothing. Answer with a plain web search.
+        const bare = bareSearchQuery(text);
+        if (bare) {
+          res.json({ tool: 'web_search', args: { query: bare }, confidence: 0.6, via: 'deterministic' });
+          return;
+        }
         res.json({ confidence: decision.confidence, via: 'none' });
         return;
       }
       const args = pickArgs(decision.tool, text);
       if (!args) {
-        // Laya named an args-requiring tool but no regex extracted args → chat.
+        // Laya named an args-requiring tool but no regex extracted args (e.g.
+        // it picks web_search for bare "search X", whose arg shape is
+        // intentionally not a deterministic intent). Fall back to the bare
+        // query before giving the utterance up to chat.
+        const bare = bareSearchQuery(text);
+        if (bare) {
+          res.json({ tool: 'web_search', args: { query: bare }, confidence: decision.confidence, via: 'deterministic' });
+          return;
+        }
         res.json({ confidence: decision.confidence, via: 'none' });
         return;
       }

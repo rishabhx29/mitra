@@ -85,6 +85,7 @@ export async function createVoiceProvider(opts: CreateVoiceProviderOptions): Pro
 export { BolnaProvider, type BolnaProviderDeps } from './bolnaProvider';
 export {
   MockProvider,
+  bareSearchQuery,
   parseIntent,
   parseAppTask,
   intentToTool,

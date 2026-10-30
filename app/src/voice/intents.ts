@@ -326,6 +326,9 @@ export const YOUTUBE_ARG_RES: RegExp[] = [
   /^youtube\s+(?:par|pe)\s+(.+?)\s+search(?:\s+(?:karo|kare))?$/,
   /^(.+?)\s+youtube\s+(?:par|pe)\s+(?:chalao|chala(?:o|\s+do)?|laga(?:o|\s+do)?|play|bajao)$/,
   /^youtube\s+(?:par|pe)\s+(.+?)\s+(?:chalao|chala(?:o|\s+do)?|laga(?:o|\s+do)?|play|bajao)$/,
+  // "youtube search X" — the natural SPOKEN form (STT rarely emits "par/pe")
+  /^youtube\s+(?:search|find)\s+(?:for\s+)?(.+)$/,
+  /^यूट्यूब\s+(?:सर्च|खोज)\s*(?:करो\s*)?(.+)$/,
   /^यूट्यूब\s*(?:पर|पे)\s*(.+?)\s*(?:सर्च\s*करो|चलाओ|लगाओ)$/,
   /^(.+?)\s+यूट्यूब\s*(?:पर|पे)\s+(?:सर्च\s*करो|चलाओ)$/,
   /^(?:search|find)\s+(?:for\s+)?(.+)$/, // bare "search X" — pickArgs-only (see above)
@@ -361,7 +364,27 @@ export const WEB_SEARCH_RES: RegExp[] = [
   /^search\s+(?:the\s+)?web\s+for\s+(.{2,80}?)[.?!]?$/,
   /^web(?:par|pe)?\s+(.{2,80}?)\s+dhundo[.?!]?$/,
   /^web\s+search\s+(.{2,80}?)[.?!]?$/,
+  // natural SPOKEN forms — STT rarely produces "search the web for"
+  /^(?:look|looking)\s+up\s+(.{2,80}?)[.?!]?$/,
+  /^search\s+up\s+(.{2,80}?)[.?!]?$/,
 ];
+
+/**
+ * Bare "search (for) X" — deliberately NOT a deterministic intent while Laya
+ * is up (the sidecar hears "search cat videos" and may prefer youtube_search
+ * over web; a deterministic rule would preempt it). But when the sidecar is
+ * DOWN (fresh boot — it is not a service), the bridge route tier uses this to
+ * answer with a plain web search instead of dropping the utterance to chat.
+ */
+export function bareSearchQuery(text: string): string | null {
+  const t = text.trim();
+  // A named surface is deterministic territory (youtube_search patterns own
+  // it) — the bare fallback must never preempt those.
+  if (/\byoutube\b|यूट्यूब/i.test(t)) return null;
+  const m = /^(?:please\s+)?(?:search|find|look\s*up|search\s+up)\s+(?:for\s+)?(.{2,80}?)[.?!]?$/.exec(t);
+  const q = m?.[1]?.replace(/\s+/g, ' ').trim();
+  return q && q.length > 1 ? q : null;
+}
 
 /** URL-shaped token extraction (exported for the bridge router's pickArgs). */
 export function extractUrl(text: string): string | null {

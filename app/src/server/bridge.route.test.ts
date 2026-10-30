@@ -144,6 +144,23 @@ describe('POST /api/brain/route — tier 2: the optional Laya sidecar', () => {
     expect(json).toEqual({ confidence: 0, via: 'none' });
   });
 
+  it('sidecar absent + bare "search X" → web_search fallback (spoken searches work without Laya)', async () => {
+    const laya = fakeLaya(() => {
+      throw new Error('ECONNREFUSED');
+    });
+    const h = await start({ settings: () => makeSettings(), env: {}, fetchImpl: laya });
+    const { json } = await postRoute(h.port, { text: 'search lofi beats' });
+    expect(json).toEqual({
+      tool: 'web_search',
+      args: { query: 'lofi beats' },
+      confidence: 0.6,
+      via: 'deterministic',
+    });
+    // A youtube-named search stays deterministic territory even with Laya down.
+    const yt = await postRoute(h.port, { text: 'search cat videos on youtube' });
+    expect(yt.json).toMatchObject({ tool: 'youtube_search', via: 'deterministic' });
+  });
+
   it('sidecar 404 / garbage shape → via:"none", never a 5xx', async () => {
     const h404 = await start({
       settings: () => makeSettings(),

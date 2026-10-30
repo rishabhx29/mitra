@@ -216,6 +216,38 @@ function bootstrap(): void {
     }
   })();
 
+  // Laya autostart (docs/DECISION_TIER_PLAN.md §4 TODO, implemented): the fast
+  // decision tier dies on every reboot because laya-serve is a manual sidecar,
+  // and without it spoken "search X" / ambiguous utterances lose their route.
+  // Probe 127.0.0.1:8000 — ANY response means something is listening (its
+  // /health path is undocumented, so ok-status is not required); otherwise
+  // start `laya-serve --model multilingual` detached from the pip user Scripts
+  // dir when present. Absent everywhere (judges' machines) → skip silently.
+  void (async () => {
+    const probe = await fetch('http://127.0.0.1:8000/').catch(() => null);
+    if (probe) return;
+    const local = process.env['LOCALAPPDATA'] ?? '';
+    const candidates = ['Python311', 'Python312', 'Python313'].map((py) =>
+      join(local, 'Programs', 'Python', py, 'Scripts', 'laya-serve.exe'),
+    );
+    const fsx = require('node:fs') as typeof import('node:fs');
+    const { spawn } = require('node:child_process') as typeof import('node:child_process');
+    const bin = candidates.find((c) => c && fsx.existsSync(c));
+    if (!bin) return;
+    try {
+      // --port is ignored by laya-serve (verified: it binds 8000 regardless).
+      const child = spawn(bin, ['--model', 'multilingual'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      child.unref();
+      console.log('[mitra] started laya-serve for the fast decision tier');
+    } catch (err) {
+      console.warn('[mitra] laya autostart failed:', err);
+    }
+  })();
+
   void startBridge({
     settings: () => settings,
     mockNotion: createMockNotion({ filePath: join(app.getPath('userData'), 'mock-notion.json') }),

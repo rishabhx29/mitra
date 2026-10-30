@@ -7,6 +7,7 @@ import type { SessionState, TranscriptEntry, WorkspaceMode } from '../shared/typ
 import { t } from '../i18n';
 import {
   MockProvider,
+  bareSearchQuery,
   failureReply,
   intentToTool,
   matchWorkspaceMode,
@@ -181,7 +182,55 @@ describe('parseIntent — note_notepad', () => {
   });
 });
 
+describe('parseIntent — web_search (spoken forms)', () => {
+  it('look up X / search up X route to web_search', () => {
+    expect(parseIntent('look up quantum computing')).toEqual({
+      kind: 'web_search',
+      query: 'quantum computing',
+    });
+    expect(parseIntent('looking up mitra assistant')).toEqual({
+      kind: 'web_search',
+      query: 'mitra assistant',
+    });
+    expect(parseIntent('search up best laptops 2026')).toEqual({
+      kind: 'web_search',
+      query: 'best laptops 2026',
+    });
+    expect(parseIntent('google weather today')).toEqual({
+      kind: 'web_search',
+      query: 'weather today',
+    });
+  });
+});
+
+describe('bareSearchQuery — route-tier fallback when the Laya sidecar is down', () => {
+  it('extracts the query from bare search shapes', () => {
+    expect(bareSearchQuery('search lofi beats')).toBe('lofi beats');
+    expect(bareSearchQuery('search for cat videos')).toBe('cat videos');
+    expect(bareSearchQuery('look up rust vs go')).toBe('rust vs go');
+    expect(bareSearchQuery('please find cheap flights')).toBe('cheap flights');
+    expect(bareSearchQuery('search')).toBeNull();
+    // not a bare search: youtube is named → deterministic youtube_search wins
+    expect(bareSearchQuery('search cat videos on youtube')).toBeNull();
+  });
+});
+
 describe('parseIntent — youtube_search', () => {
+  it('SPOKEN forms: "youtube search X" (STT rarely emits par/pe) + Devanagari', () => {
+    expect(parseIntent('youtube search lofi beats')).toEqual({
+      kind: 'youtube_search',
+      query: 'lofi beats',
+    });
+    expect(parseIntent('youtube find cat videos')).toEqual({
+      kind: 'youtube_search',
+      query: 'cat videos',
+    });
+    expect(parseIntent('यूट्यूब सर्च lofi beats')).toEqual({
+      kind: 'youtube_search',
+      query: 'lofi beats',
+    });
+  });
+
   it('en table: "open youtube and search X" / "search X on youtube" / "play X on youtube"', () => {
     expect(parseIntent('open youtube and search lofi beats')).toEqual({
       kind: 'youtube_search',

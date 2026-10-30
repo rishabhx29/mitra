@@ -26,6 +26,7 @@ import { failureReply, fetchRouteDecision, intentToTool, parseIntent } from './i
 export {
   AGENDA_RES,
   APP_TASK_RES,
+  bareSearchQuery,
   NOTE_ARG_RES,
   YOUTUBE_ARG_RES,
   failureReply,
