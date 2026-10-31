@@ -326,6 +326,10 @@ export const YOUTUBE_ARG_RES: RegExp[] = [
   /^youtube\s+(?:par|pe)\s+(.+?)\s+search(?:\s+(?:karo|kare))?$/,
   /^(.+?)\s+youtube\s+(?:par|pe)\s+(?:chalao|chala(?:o|\s+do)?|laga(?:o|\s+do)?|play|bajao)$/,
   /^youtube\s+(?:par|pe)\s+(.+?)\s+(?:chalao|chala(?:o|\s+do)?|laga(?:o|\s+do)?|play|bajao)$/,
+  // "open avengers doomsday trailer in youtube" — the natural SPOKEN shape
+  // (opens the app AND searches): must beat the open_url well-known-site rule.
+  /^open\s+(.{2,80}?)\s+(?:in|on)\s+youtube$/,
+  /^play\s+(.{2,80}?)\s+(?:in|on)\s+youtube$/,
   // "youtube search X" — the natural SPOKEN form (STT rarely emits "par/pe")
   /^youtube\s+(?:search|find)\s+(?:for\s+)?(.+)$/,
   /^यूट्यूब\s+(?:सर्च|खोज)\s*(?:करो\s*)?(.+)$/,

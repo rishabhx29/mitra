@@ -130,7 +130,7 @@ export interface Settings {
    * chatWithBrain prefers it over the auto-pick); absent/'' = auto-pick.
    */
   console?: { model?: string };
-  /** Offline STT language id (shared/voiceLanguages.ts); default en-us. */
+  /** Offline STT language id (shared/voiceLanguages.ts); default en-in. */
   voiceLanguage?: string;
 }
 

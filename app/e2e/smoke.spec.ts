@@ -147,7 +147,7 @@ async function submitDevInput(text: string): Promise<void> {
  * greeting instead of racing it. Later submissions are safe — readiness is monotonic.
  */
 async function expectProviderReady(): Promise<void> {
-  await expect(overlayPage.getByTestId('mitra-caption')).toContainText('Hi, I am Mitra', {
+  await expect(overlayPage.getByTestId('mitra-caption')).toContainText('Listening.', {
     timeout: 60_000,
   });
 }

@@ -154,8 +154,7 @@ export const hi: Record<string, string> = {
   'status.saved': 'सहेजा गया',
   'status.saveFailed': 'सहेजना विफल',
   // Voice / overlay conversation (Task D)
-  'voice.greeting':
-    'नमस्ते, मैं मित्र हूँ। बोलिए — "मेरी लिस्ट में दूध जोड़ो", "notepad खोलो", या "open opencode and build a snake game"।',
+  'voice.greeting': 'सुन रहा हूँ।',
   'voice.clarify':
     'माफ़ कीजिए, समझ नहीं आया। आप टू-डू जोड़ने, ऐप खोलने, लिंक खोलने या opencode टास्क के लिए कह सकते हैं।',
   'voice.identityReply':

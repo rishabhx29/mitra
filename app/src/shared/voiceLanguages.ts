@@ -34,7 +34,7 @@ export const VOICE_LANGUAGES: readonly VoiceLanguage[] = [
   { id: 'cn', label: 'Chinese', native: '中文', ttsLang: 'zh-CN', modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip', approxMb: 40 },
 ] as const;
 
-export const DEFAULT_VOICE_LANGUAGE = 'en-us';
+export const DEFAULT_VOICE_LANGUAGE = 'en-in';
 
 export function findVoiceLanguage(id: string | undefined): VoiceLanguage {
   return VOICE_LANGUAGES.find((l) => l.id === id) ?? VOICE_LANGUAGES[0];

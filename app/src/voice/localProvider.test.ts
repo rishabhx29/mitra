@@ -34,17 +34,29 @@ function fakeTts() {
 
 function modelFake() {
   const made: VoskModelLike[] = [];
+  const recognizers: Array<{ fed: number; listeners: Array<(m: { result?: { text?: string } }) => void> }> = [];
   return {
     made,
+    recognizers,
     createModel: async (_url: string): Promise<VoskModelLike> => {
       const listeners: Array<(m: { result?: { text?: string } }) => void> = [];
+      const rec = {
+        fed: 0,
+        listeners,
+        on(_event: 'result', cb: (m: { result?: { text?: string } }) => void): void {
+          listeners.push(cb);
+        },
+        acceptWaveformFloat(_c: Float32Array, _rate: number): void {
+          rec.fed += 1;
+        },
+        remove(): void {},
+      };
+      recognizers.push(rec);
       const model: VoskModelLike = {
         KaldiRecognizer: class {
-          on(_event: 'result', cb: (m: { result?: { text?: string } }) => void): void {
-            listeners.push(cb);
+          constructor() {
+            return rec as unknown as object;
           }
-          acceptWaveformFloat(_c: Float32Array, _rate: number): void {}
-          remove(): void {}
         } as unknown as VoskModelLike['KaldiRecognizer'],
         terminate: () => {},
       };
@@ -136,8 +148,8 @@ describe('LocalVoiceProvider.start (injected model + mic)', () => {
     p.onTranscript((e) => entries.push(e.text));
     await p.start();
 
-    // greeting emitted (voice.greeting key), recognizer created from the bridge URL
-    expect(entries[0]).toContain('Mitra');
+    // ONE short intro (was: a paragraph, emitted TWICE — the agent talked non-stop)
+    expect(entries).toEqual(['Listening.']);
     expect(model.made.length).toBe(1);
 
     // simulate a recognition final → same pipeline as typed text
@@ -148,6 +160,75 @@ describe('LocalVoiceProvider.start (injected model + mic)', () => {
 
     await p.stop();
     expect(streamStop).toBeGreaterThan(0);
+  });
+
+  it('gates the mic while the agent speaks and resumes after (never transcribes its own voice)', async () => {
+    const { fetchImpl } = bridgeFake();
+    // TTS that holds the utterance open until the test releases it.
+    let release: () => void = () => {};
+    const tts = {
+      speak: (_t: string, _l: string, onEnd: () => void) => {
+        release = onEnd;
+      },
+      cancel: () => {},
+    };
+    const model = modelFake();
+    const p = new LocalVoiceProvider({
+      fetchImpl,
+      tts,
+      fastTimers: true,
+      getLanguage: () => 'en-us',
+      createModel: model.createModel,
+      mediaDevices: {
+        getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+      },
+    });
+    await p.start();
+    const rec = model.recognizers[0]!;
+    p.feedAudio(new Float32Array(64), 16000);
+    const fedListening = rec.fed;
+    expect(fedListening).toBeGreaterThan(0); // listening: audio flows
+
+    // Trigger a reply; the TTS stays open => still speaking.
+    const run = p.submitText('add chai to my todo list');
+    await new Promise((r) => setTimeout(r, 30));
+    p.feedAudio(new Float32Array(64), 16000);
+    expect(rec.fed).toBe(fedListening); // GATED — our own TTS can never re-enter
+
+    release(); // TTS ends
+    await run;
+    await new Promise((r) => setTimeout(r, 20)); // post-speech cooldown (5ms fast)
+    p.feedAudio(new Float32Array(64), 16000);
+    expect(rec.fed).toBe(fedListening + 1); // resumed for the user
+    await p.stop();
+  });
+
+  it('ignores single noise-word recognitions — room noise must not trigger replies', async () => {
+    const { fetchImpl } = bridgeFake();
+    const tts = fakeTts();
+    const model = modelFake();
+    const p = new LocalVoiceProvider({
+      fetchImpl,
+      tts,
+      fastTimers: true,
+      getLanguage: () => 'en-us',
+      createModel: model.createModel,
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream },
+    });
+    const entries: string[] = [];
+    p.onTranscript((e) => entries.push(e.text));
+    await p.start();
+    const listeners = model.recognizers[0]!.listeners;
+    listeners[0]?.({ result: { text: 'the' } });
+    listeners[0]?.({ result: { text: 'hmm' } });
+    listeners[0]?.({ result: { text: 'a' } });
+    await new Promise((r) => setTimeout(r, 30));
+    // nothing but the intro so far — no replies to noise
+    expect(entries).toEqual(['Listening.']);
+    listeners[0]?.({ result: { text: 'add chai to my todo list' } });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(entries.some((x) => x.includes('chai'))).toBe(true);
+    await p.stop();
   });
 
   it('throws model-unavailable when the model download fails (never silently)', async () => {

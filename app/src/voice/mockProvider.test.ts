@@ -182,6 +182,28 @@ describe('parseIntent — note_notepad', () => {
   });
 });
 
+describe('parseIntent — youtube_search (open X in/on youtube)', () => {
+  it('spoken "open <title> in/on youtube" searches instead of just opening the site', () => {
+    expect(parseIntent('open avengers doomsday trailer in youtube')).toEqual({
+      kind: 'youtube_search',
+      query: 'avengers doomsday trailer',
+    });
+    expect(parseIntent('open avengers endgame trailer on youtube')).toEqual({
+      kind: 'youtube_search',
+      query: 'avengers endgame trailer',
+    });
+    expect(parseIntent('play despacito in youtube')).toEqual({
+      kind: 'youtube_search',
+      query: 'despacito',
+    });
+  });
+
+  it('bare "open youtube" still opens the site (no query to search)', () => {
+    expect(parseIntent('open youtube')).not.toMatchObject({ kind: 'youtube_search' });
+    expect(parseIntent('open in youtube')).not.toMatchObject({ kind: 'youtube_search' });
+  });
+});
+
 describe('parseIntent — web_search (spoken forms)', () => {
   it('look up X / search up X route to web_search', () => {
     expect(parseIntent('look up quantum computing')).toEqual({

@@ -154,8 +154,7 @@ export const en: Record<string, string> = {
   'status.saved': 'Saved',
   'status.saveFailed': 'Save failed',
   // Voice / overlay conversation (Task D)
-  'voice.greeting':
-    'Hi, I am Mitra. Try "add milk to my list", "open notepad", or "open opencode and build a snake game".',
+  'voice.greeting': 'Listening.',
   'voice.clarify':
     "Sorry, I didn't catch that. You can ask me to add a to-do, open an app, open a link, or run an opencode task.",
   'voice.identityReply':

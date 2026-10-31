@@ -80,6 +80,23 @@ const OS_TTS = {
   },
 };
 
+/**
+ * Single noise words Vosk emits for breath/click/partial audio. A recognized
+ * result that is ONLY one of these must not trigger a reply — otherwise the
+ * agent answers random room noise (and its own TTS in the echo case).
+ */
+const NOISE_WORDS: ReadonlySet<string> = new Set([
+  'a', 'an', 'the', 'uh', 'um', 'hm', 'hmm', 'huh', 'and', 'or', 'to', 'of', 'so', 'is', 'it', 'i', 'you',
+]);
+
+/** True when a recognized utterance is too empty to act on (noise guard). */
+export function isNoiseUtterance(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t.replace(/\s/g, '').length < 3) return true;
+  const words = t.split(/\s+/);
+  return words.length === 1 && NOISE_WORDS.has(words[0] ?? '');
+}
+
 export class LocalVoiceProvider implements VoiceProvider {
   readonly syntheticAmplitude = { current: 0 };
   private stateCbs: Array<(s: SessionState) => void> = [];
@@ -92,6 +109,15 @@ export class LocalVoiceProvider implements VoiceProvider {
   private recognizer: VoskRecognizerLike | null = null;
   private model: VoskModelLike | null = null;
   private envelopeTimer: number | null = null;
+  /**
+   * Half-duplex gate: while the agent speaks, the mic feed is PAUSED. Without
+   * this the speakers' output reaches the mic, Vosk transcribes Mitra's own
+   * voice as a user command, and the agent answers itself forever (the
+   * "continuously keeps talking" bug). Resumes after a short post-speech
+   * cooldown so trailing speaker audio never re-enters the recognizer.
+   */
+  private micGated = false;
+  private micResumeTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly d: Required<Pick<LocalProviderDeps, 'bridgeBase' | 'fetchImpl' | 'tts' | 'log'>> &
     LocalProviderDeps;
 
@@ -173,7 +199,8 @@ export class LocalVoiceProvider implements VoiceProvider {
     this.recognizer = recognizer;
     recognizer.on('result', (m) => {
       const text = m.result?.text?.trim();
-      if (text) void this.submitText(text);
+      if (!text || isNoiseUtterance(text)) return;
+      void this.submitText(text);
     });
 
     // Mic acquisition works in both environments (injected fake in tests);
@@ -193,22 +220,51 @@ export class LocalVoiceProvider implements VoiceProvider {
       const node = ctx.createScriptProcessor(4096, 1, 1);
       const sampleRate = ctx.sampleRate || 16000;
       node.onaudioprocess = (e) => {
-        if (this.recognizer && !this.disposed) {
-          this.recognizer.acceptWaveformFloat(e.inputBuffer.getChannelData(0), sampleRate);
-        }
+        this.feedAudio(e.inputBuffer.getChannelData(0), sampleRate);
       };
       src.connect(node);
       node.connect(ctx.destination);
     }
+    // ONE short intro — then silence until the user speaks. (This used to be
+    // emitted twice, and the greeting itself was a paragraph.)
     this.emit({ role: 'agent', text: t(this.lang, 'voice.greeting'), ts: Date.now() });
+  }
 
-    this.emit({ role: 'agent', text: t(this.lang, 'voice.greeting'), ts: Date.now() });
+  /**
+   * One audio chunk into the recognizer — the ONLY path mic audio takes, so
+   * the half-duplex gate has a single seam (and tests can drive it directly).
+   */
+  feedAudio(chunk: Float32Array, sampleRate: number): void {
+    if (!this.recognizer || this.disposed || this.micGated) return;
+    this.recognizer.acceptWaveformFloat(chunk, sampleRate);
+  }
+
+  private gateMicForSpeech(): void {
+    this.micGated = true;
+    if (this.micResumeTimer) clearTimeout(this.micResumeTimer);
+  }
+
+  /** Resume the mic feed once trailing speaker audio has died out. */
+  private resumeMicAfterSpeech(): void {
+    if (this.micResumeTimer) clearTimeout(this.micResumeTimer);
+    this.micResumeTimer = setTimeout(
+      () => {
+        this.micGated = false;
+        this.micResumeTimer = null;
+      },
+      this.d.fastTimers ? 5 : 300,
+    );
   }
 
   async stop(): Promise<void> {
     this.disposed = true;
     this.stopEnvelope();
     this.d.tts.cancel();
+    this.micGated = false;
+    if (this.micResumeTimer) {
+      clearTimeout(this.micResumeTimer);
+      this.micResumeTimer = null;
+    }
     this.recognizer?.remove();
     this.recognizer = null;
     this.model?.terminate();
@@ -313,6 +369,7 @@ export class LocalVoiceProvider implements VoiceProvider {
     this.emit({ role: 'agent', text, ts: Date.now() });
     this.setSessionState('speaking');
     this.startEnvelope();
+    this.gateMicForSpeech(); // half-duplex: never transcribe our own voice
     const voiceLang = findVoiceLanguage(this.d.getLanguage?.());
     return new Promise<void>((resolve) => {
       let done = false;
@@ -320,6 +377,7 @@ export class LocalVoiceProvider implements VoiceProvider {
         if (done) return;
         done = true;
         this.stopEnvelope();
+        this.resumeMicAfterSpeech();
         if (!this.disposed) this.setSessionState('listening');
         resolve();
       };
