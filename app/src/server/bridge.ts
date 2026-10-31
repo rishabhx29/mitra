@@ -239,7 +239,7 @@ export function createBridgeApp(deps: BridgeDeps): Express {
           tool: 'open_url',
           args: { url: `https://${host}` },
         });
-        if (opened.ok) return { ...opened, summary: `${opened.summary} (${raw} → https://${host})` };
+        if (opened.ok) return { ...opened, summary: `Opened ${raw} on the web` };
       }
       // Tier 2: the LLM infers the right domain / tool.
       const escalated = await escalateUnknownApp(req, fallback);

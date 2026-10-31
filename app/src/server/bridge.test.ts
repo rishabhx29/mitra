@@ -171,7 +171,7 @@ describe('POST /api/tools/:name — unknown-app tiers', () => {
     });
     const body = (await res.json()) as { ok: boolean; summary: string };
     expect(body.ok).toBe(true);
-    expect(body.summary).toContain('animejs.com');
+    expect(body.summary).toBe('Opened animejs on the web');
     expect(executed.some((e) => e.tool === 'open_url')).toBe(true);
     expect(calls.some((c) => c.url.includes('/api/generate'))).toBe(false); // brain never needed
   });

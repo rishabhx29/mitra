@@ -521,7 +521,7 @@ describe('open_url', () => {
     const dispatch = createToolDispatcher(makeDeps(stubs));
     const result = await dispatch({ id: 'b1', tool: 'open_url', args: { url: 'https://example.com/a?b=1' } });
     expect(result.ok).toBe(true);
-    expect(result.summary).toBe('Opened https://example.com/a?b=1 in the browser');
+    expect(result.summary).toBe('Opened example.com/a in the browser'); // TTS-friendly: no wire format
     expect(stubs.opener.mock.calls).toEqual([['https://example.com/a?b=1']]);
   });
 

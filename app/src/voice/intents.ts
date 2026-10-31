@@ -365,6 +365,10 @@ export const CLOSE_APP_RES: RegExp[] = [
 ];
 export const WEB_SEARCH_RES: RegExp[] = [
   /^google\s+(.{2,80}?)[.?!]?$/,
+  // "open browser and search for X" / "search X in the browser" — the browser
+  // is not an app to launch here; it IS the search surface.
+  /^(?:open(?:\s+the)?\s+)?browser\s+and\s+(?:search|google|find)\s+(?:for\s+)?(.{2,80}?)[.?!]?$/,
+  /^(?:search|google|find)\s+(?:for\s+)?(.{2,80}?)\s+in\s+(?:the\s+)?browser[.?!]?$/,
   /^search\s+(?:the\s+)?web\s+for\s+(.{2,80}?)[.?!]?$/,
   /^web(?:par|pe)?\s+(.{2,80}?)\s+dhundo[.?!]?$/,
   /^web\s+search\s+(.{2,80}?)[.?!]?$/,

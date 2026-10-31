@@ -225,6 +225,7 @@ export function buildToolSystemPrompt(language: 'en' | 'hi', tools: readonly str
     '\nSEMANTIC RULES (infer intent — do not match words literally):' +
     '\n- "open <name>" where <name> is a website, product or library rather than an installed app (e.g. animejs, bolna, react) → use open_url with its https URL (https://animejs.com, https://bolna.ai, https://react.dev).' +
     '\n- "search <query>" about movies, trailers, songs or videos → youtube_search; about facts, docs, code or products → web_search.' +
+    '\n- NEVER call open_url without a complete https URL in args.url (never empty, never a bare name); when asked to search, prefer youtube_search/web_search over open_url.' +
     '\nIf no tool fits, or information is missing, answer conversationally instead.'
   );
 }
