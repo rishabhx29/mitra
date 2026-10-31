@@ -27,6 +27,7 @@ export {
   AGENDA_RES,
   APP_TASK_RES,
   bareSearchQuery,
+  correctTranscript,
   NOTE_ARG_RES,
   YOUTUBE_ARG_RES,
   failureReply,

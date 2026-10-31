@@ -9,6 +9,7 @@
 import type { TranscriptEntry, SessionState, VoiceProvider, WorkspaceMode } from '../shared/types';
 import { findVoiceLanguage } from '../shared/voiceLanguages';
 import { parseIntent, intentToTool, failureReply, fetchRouteDecision, ROUTE_TIMEOUT_MS } from './mockProvider';
+import { correctTranscript } from './intents';
 import { t, type Lang } from '../i18n';
 
 /** Vosk surface this provider consumes (vosk-browser 0.0.8: Model.KaldiRecognizer). */
@@ -198,8 +199,11 @@ export class LocalVoiceProvider implements VoiceProvider {
     const recognizer = new model.KaldiRecognizer(16000);
     this.recognizer = recognizer;
     recognizer.on('result', (m) => {
-      const text = m.result?.text?.trim();
-      if (!text || isNoiseUtterance(text)) return;
+      const heard = m.result?.text?.trim();
+      if (!heard || isNoiseUtterance(heard)) return;
+      // STT garbles product names ("open code" → "open court") — pull them
+      // back to the domain vocabulary before the parser sees them.
+      const text = correctTranscript(heard);
       void this.submitText(text);
     });
 

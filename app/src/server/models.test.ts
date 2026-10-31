@@ -41,8 +41,8 @@ describe('voiceLanguages map', () => {
     }
   });
   it('falls back to the default for unknown ids', () => {
-    expect(findVoiceLanguage(undefined).id).toBe('en-us');
-    expect(findVoiceLanguage('klingon').id).toBe('en-us');
+    expect(findVoiceLanguage(undefined).id).toBe('en-in');
+    expect(findVoiceLanguage('klingon').id).toBe('en-in');
   });
 });
 

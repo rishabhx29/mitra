@@ -18,6 +18,7 @@ export interface VoiceLanguage {
 }
 
 export const VOICE_LANGUAGES: readonly VoiceLanguage[] = [
+  { id: 'en-in-acc', label: 'English (India · accurate ~1GB)', native: 'English (IN)', ttsLang: 'en-IN', modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-en-in-0.5.zip', approxMb: 1000 },
   { id: 'en-us', label: 'English (US)', native: 'English', ttsLang: 'en-US', modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip', approxMb: 40 },
   { id: 'en-in', label: 'English (India)', native: 'English (IN)', ttsLang: 'en-IN', modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-small-en-in-0.4.zip', approxMb: 45 },
   { id: 'hi', label: 'Hindi', native: 'हिन्दी', ttsLang: 'hi-IN', modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip', approxMb: 40 },
@@ -37,5 +38,9 @@ export const VOICE_LANGUAGES: readonly VoiceLanguage[] = [
 export const DEFAULT_VOICE_LANGUAGE = 'en-in';
 
 export function findVoiceLanguage(id: string | undefined): VoiceLanguage {
-  return VOICE_LANGUAGES.find((l) => l.id === id) ?? VOICE_LANGUAGES[0];
+  return (
+    VOICE_LANGUAGES.find((l) => l.id === id) ??
+    VOICE_LANGUAGES.find((l) => l.id === DEFAULT_VOICE_LANGUAGE) ??
+    VOICE_LANGUAGES[0]
+  );
 }

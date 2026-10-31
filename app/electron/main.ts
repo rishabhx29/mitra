@@ -14,6 +14,8 @@ import type { Settings } from '../src/shared/types';
 import { registerIpcHandlers } from './ipc';
 import { createHotkeyManager } from './hotkey';
 import { createSettingsStore } from './store';
+import { applySettingsPatch } from './ipc';
+import { DEFAULT_VOICE_LANGUAGE } from '../src/shared/voiceLanguages';
 import { createTray, type TrayLike } from './tray';
 import { createMockNotion } from '../src/server/mockNotion';
 import { createMemoryStore } from '../src/server/memory';
@@ -213,6 +215,31 @@ function bootstrap(): void {
       console.log('[mitra] started ollama serve for the local brain');
     } catch (err) {
       console.warn('[mitra] ollama autostart failed:', err);
+    }
+  })();
+
+  // One-time voice-model migration: installs before the en-in default carried
+  // 'en-us' in their stored settings, and the US model garbles Indian accents
+  // ("open code" → "open court"). Migrate ONCE (marker file so the user's
+  // explicit later choice is never overridden).
+  void (async () => {
+    try {
+      const fsx = require('node:fs') as typeof import('node:fs');
+      const path = require('node:path') as typeof import('node:path');
+      const marker = path.join(app.getPath('userData'), 'mitra-migrations.json');
+      let done: Record<string, boolean> = {};
+      if (fsx.existsSync(marker)) done = JSON.parse(fsx.readFileSync(marker, 'utf-8')) as Record<string, boolean>;
+      if (!done['voiceEnIn']) {
+        if ((settings.voiceLanguage ?? DEFAULT_VOICE_LANGUAGE) === 'en-us') {
+          settings = applySettingsPatch(settings, { voiceLanguage: 'en-in' });
+          store.save(settings);
+          console.log('[mitra] migrated voiceLanguage en-us → en-in (Indian English STT)');
+        }
+        done['voiceEnIn'] = true;
+        fsx.writeFileSync(marker, JSON.stringify(done));
+      }
+    } catch (err) {
+      console.warn('[mitra] voice migration failed:', err);
     }
   })();
 

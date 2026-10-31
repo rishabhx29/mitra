@@ -48,11 +48,11 @@ const IDENTITY_RE =
 //    (design/deso before de, banao before bana) and every verb carries \b so
 //    "do" can never half-match "download".
 const OPENCODE_RES: RegExp[] = [
-  /^open\s+opencode\s+(?:and|aur|or|phir|then)?\s*(?:please\s+)?(?:(?:write|type)\s+into|build|design|deso|make|banao|bana|likho|run|chalu|chala|give|ask|tell|send|prompt|feed|de\s+do|dedo|de|do|bolo|bhejo|kaam)\b(?:\s+(?:it|usko|usse|ko))?\b[\s:,-]*(.+)$/,
-  /^opencode\s+(?:me|mein|par|pe)\s+(.+?)\s+(?:banao|bana|likho|build|de\s+do|dedo|bhejo)$/,
-  /^opencode\s+(?:build|design|deso|make|banao|bana|likho|run|give|ask|tell|send|prompt|feed|de\s+do|dedo|de|do|bolo|bhejo|kaam)\b(?:\s+(?:it|usko|usse|ko))?\b[\s:,-]*(.+)$/,
+  /^open\s+(?:opencode|open\s?code|code)\s+(?:and|aur|or|phir|then)?\s*(?:please\s+)?(?:(?:write|type)\s+into|build|design|deso|make|banao|bana|likho|run|chalu|chala|give|ask|tell|send|prompt|feed|de\s+do|dedo|de|do|bolo|bhejo|kaam)\b(?:\s+(?:it|usko|usse|ko))?\b[\s:,-]*(.+)$/,
+  /^(?:opencode|open\s?code|code)\s+(?:me|mein|par|pe)\s+(.+?)\s+(?:banao|bana|likho|build|de\s+do|dedo|bhejo)$/,
+  /^(?:opencode|open\s?code|code)\s+(?:build|design|deso|make|banao|bana|likho|run|give|ask|tell|send|prompt|feed|de\s+do|dedo|de|do|bolo|bhejo|kaam)\b(?:\s+(?:it|usko|usse|ko))?\b[\s:,-]*(.+)$/,
   // verb-first request shape: "tell opencode to build a snake game"
-  /^(?:tell|ask)\s+opencode\s+to\s+(.+)$/,
+  /^(?:tell|ask)\s+(?:opencode|open\s?code|code)\s+to\s+(.+)$/,
 ];
 
 // 4) add-todo — "add X to my (todo )?list" / "list me X" / "X add karo" / "meri list me X jodo" (+ Devanagari).
@@ -134,7 +134,92 @@ const APP_TASK_PRONOUN_APPS = new Set([
 ]);
 
 /** App tokens that route to their own richer tool instead of plain app_task. */
-const OPENCODE_APP_RE = /^opencode$/;
+/**
+ * Domain-lexicon fuzzy rewriter for STT transcripts. Vosk small models garble
+ * product names ("open code" → "open court"); every word is checked against
+ * the app's own vocabulary and pulled to the closest known token when the edit
+ * distance is small. English-only (the STT words we correct are Latin); runs
+ * BEFORE parseIntent so the deterministic patterns see the intended words.
+ */
+export const DOMAIN_LEXICON: readonly string[] = [
+  'opencode', 'youtube', 'notepad', 'browser', 'chrome', 'firefox', 'edge',
+  'terminal', 'wikipedia', 'notion', 'spotify', 'discord', 'whatsapp',
+  'telegram', 'calculator', 'calendar', 'camera', 'netflix', 'gmail', 'maps',
+  'code', 'mitra',
+];
+
+/** Classic Levenshtein distance, small strings only (lexicon words are short). */
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (Math.abs(m - n) > 2) return 99; // length gap too wide for any tier
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[n] ?? 3;
+}
+
+/** Grammar words a wrong "correction" would wreck ("todo" is 2 edits from "code"). */
+const PROTECTED_WORDS: ReadonlySet<string> = new Set([
+  'todo', 'today', 'tone', 'note', 'mode', 'node', 'come', 'some', 'home',
+  'time', 'team', 'take', 'make', 'list', 'this', 'that', 'with', 'when',
+]);
+
+/** Pull STT-garbled words to the closest domain token ("court" → "code"). */
+export function correctTranscript(text: string): string {
+  const words = text.trim().split(/\s+/);
+  const fixWord = (w: string): string => {
+    const t = w.toLowerCase().replace(/[^a-z]/g, '');
+    if (t.length < 4 || DOMAIN_LEXICON.includes(t) || PROTECTED_WORDS.has(t)) return w;
+    // Longer words get a wider net: "court"(5) is 3 edits from "code".
+    const maxD = t.length >= 5 ? 3 : 2;
+    let best: string | null = null;
+    let bestD = maxD + 1;
+    for (const lex of DOMAIN_LEXICON) {
+      const d = editDistance(t, lex);
+      if (d < bestD) {
+        bestD = d;
+        best = lex;
+      }
+    }
+    return best && bestD <= maxD ? best : w;
+  };
+  const out: string[] = [];
+  let i = 0;
+  while (i < words.length) {
+    // Cross-word garbles first: "you to be" → "youtobe" → youtube; joining is
+    // self-guarding (only fires when the join actually hits the lexicon).
+    let joined = false;
+    for (const take of [3, 2]) {
+      if (i + take > words.length) continue;
+      const run = words.slice(i, i + take).join('').toLowerCase().replace(/[^a-z]/g, '');
+      if (run.length < 5) continue;
+      const hit = DOMAIN_LEXICON.find((lex) => editDistance(run, lex) <= 2);
+      if (hit) {
+        out.push(hit);
+        i += take;
+        joined = true;
+        break;
+      }
+    }
+    if (!joined) {
+      out.push(fixWord(words[i] ?? ''));
+      i += 1;
+    }
+  }
+  return out.join(' ');
+}
+
+const OPENCODE_APP_RE = /^(?:opencode|open\s?code|code)$/;
 
 /**
  * Parse an app_task composite ("open notepad and write hello") into its app +

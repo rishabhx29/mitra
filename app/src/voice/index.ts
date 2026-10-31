@@ -86,6 +86,7 @@ export { BolnaProvider, type BolnaProviderDeps } from './bolnaProvider';
 export {
   MockProvider,
   bareSearchQuery,
+  correctTranscript,
   parseIntent,
   parseAppTask,
   intentToTool,

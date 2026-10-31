@@ -8,6 +8,7 @@ import { t } from '../i18n';
 import {
   MockProvider,
   bareSearchQuery,
+  correctTranscript,
   failureReply,
   intentToTool,
   matchWorkspaceMode,
@@ -201,6 +202,28 @@ describe('parseIntent — youtube_search (open X in/on youtube)', () => {
   it('bare "open youtube" still opens the site (no query to search)', () => {
     expect(parseIntent('open youtube')).not.toMatchObject({ kind: 'youtube_search' });
     expect(parseIntent('open in youtube')).not.toMatchObject({ kind: 'youtube_search' });
+  });
+});
+
+describe('correctTranscript — STT domain-vocabulary repair', () => {
+  it('pulls garbled product names to the closest domain token', () => {
+    expect(correctTranscript('open court and build a snake game')).toBe('open code and build a snake game');
+    expect(correctTranscript('open you to be and search lofi')).toBe('open youtube and search lofi');
+    expect(correctTranscript('open notepod and write hello')).toBe('open notepad and write hello');
+  });
+
+  it('leaves correct words and ordinary prose alone', () => {
+    expect(correctTranscript('open youtube and search lofi')).toBe('open youtube and search lofi');
+    expect(correctTranscript('what is the weather today')).toBe('what is the weather today');
+    // short words (<4 chars) are never "corrected"
+    expect(correctTranscript('add chai to my todo list')).toBe('add chai to my todo list');
+  });
+});
+
+describe('parseIntent — "open code" is opencode', () => {
+  it('accepts the spoken shorthand and routes composite tasks to opencode', () => {
+    expect(parseIntent('open code and build a snake game')).toMatchObject({ kind: 'opencode_task' });
+    expect(parseIntent('tell code to fix the bug')).toMatchObject({ kind: 'opencode_task' });
   });
 });
 
