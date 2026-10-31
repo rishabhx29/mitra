@@ -58,7 +58,7 @@ export const LAYA_TOOL_OPTIONS: readonly string[] = [
 export const LAYA_TOOL_CRITERIA: Readonly<Record<string, string>> = {
   notion_add_todo: 'user wants to add an item to their to-do list',
   note_notepad: 'user wants a note written in notepad',
-  youtube_search: 'user wants to open youtube and search or play something',
+  youtube_search: 'user wants to watch or find a video, movie, trailer, teaser, song or music on youtube',
   agenda_today: 'user asks what is due or scheduled today',
   launch_app: 'user wants to open an application',
   app_task: 'open an app AND write/type specific content into it (notepad, etc.)',
@@ -69,7 +69,7 @@ export const LAYA_TOOL_CRITERIA: Readonly<Record<string, string>> = {
   workspace_mode: 'user wants a workspace preset like coding or gaming mode',
   open_any_app: 'user wants to open any application by name',
   close_app: 'user wants to close or quit a running application',
-  web_search: 'user wants to search the web (google) for something',
+  web_search: 'user wants to look up general information, docs or facts on the web (not a video)',
   none: 'general conversation, no tool',
 };
 

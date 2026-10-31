@@ -135,6 +135,51 @@ describe('POST /api/session', () => {
   });
 });
 
+describe('POST /api/tools/:name — unknown-app brain escalation', () => {
+  it('"open animejs" (unknown app) escalates to the brain → open_url executes', async () => {
+    const calls: FetchCall[] = [];
+    const fetchImpl = (async (url: string, init?: { method?: string; body?: string }) => {
+      calls.push({ url, init });
+      if (url.includes('/api/tags')) {
+        return { ok: true, status: 200, json: async () => ({ models: [{ name: 'qwen2.5:3b', size: 1 }] }) } as unknown as Response;
+      }
+      if (url.endsWith('/api/generate')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ response: '{"tool":"open_url","args":{"url":"https://animejs.com"}}' }),
+        } as unknown as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const executed: Array<{ tool: string; args: Record<string, unknown> }> = [];
+    const executeTool = async (req: { id: string; tool: string; args: Record<string, unknown> }) => {
+      executed.push({ tool: req.tool, args: req.args });
+      if (req.tool === 'launch_app') {
+        return { id: req.id, ok: false, summary: 'Unknown app "animejs". Available apps: notepad, terminal, browser.' };
+      }
+      return { id: req.id, ok: true, summary: `Opened https://animejs.com in your browser` };
+    };
+    const h = await start({
+      settings: () => makeSettings(),
+      env: {},
+      fetchImpl,
+      executeTool: executeTool as unknown as BridgeDeps['executeTool'],
+    });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/tools/launch_app`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'e1', tool: 'launch_app', args: { alias: 'animejs' } }),
+    });
+    const body = (await res.json()) as { ok: boolean; summary: string };
+    expect(body.ok).toBe(true);
+    expect(body.summary).toContain('animejs.com');
+    // the brain's open_url action ran through the SAME dispatcher
+    expect(executed.some((e) => e.tool === 'open_url' && e.args['url'] === 'https://animejs.com')).toBe(true);
+    expect(calls.some((c) => c.url.endsWith('/api/generate'))).toBe(true);
+  });
+});
+
 describe('POST /api/tools/:name', () => {
   it('denied tool → HTTP 403 with { ok:false, summary:"Permission denied: <gate>" } and nothing executes', async () => {
     const executeTool = vi.fn(async (req: { id: string }) => ({ id: req.id, ok: true, summary: 'should never run' }));

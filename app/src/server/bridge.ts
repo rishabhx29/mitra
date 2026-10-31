@@ -165,12 +165,56 @@ export function createBridgeApp(deps: BridgeDeps): Express {
     });
   const log = deps.log ?? (() => {});
 
+  /**
+   * Unknown-app brain escalation ("open animejs"): the deterministic launch_app
+   * matcher matches any "open X" shape but can only resolve INSTALLED apps —
+   * for a website/product name it would dead-end with "Unknown app". The user's
+   * intent is semantic, so escalate ONCE to the tool-calling brain, which knows
+   * common sites (animejs → https://animejs.com) and can act via open_url /
+   * web_search / app_task instead. One-shot: the brain's own tool call runs
+   * through the raw dispatcher (no re-escalation → no loops). Brain offline →
+   * the honest unknown-app failure stands.
+   */
+  const escalateUnknownApp = async (req: ToolRequest, fallback: ToolResult): Promise<ToolResult> => {
+    const name = String(req.args['alias'] ?? req.args['name'] ?? '').trim();
+    if (!name) return fallback;
+    let acted: { ok: boolean; summary: string } | null = null;
+    try {
+      await chatWithBrain({
+        messages: [{ role: 'user', content: `open ${name}` }],
+        language: 'en',
+        fetchImpl,
+        preferredModel: settings().console?.model?.trim() || undefined,
+        toolNames: KNOWN_TOOLS,
+        executeTool: async (tool, args) => {
+          const out = await executeTool({ id: `escalate-${Date.now()}`, tool: tool as ToolName, args });
+          acted = { ok: out.ok, summary: out.summary };
+          return { ok: out.ok, summary: out.summary };
+        },
+      });
+    } catch {
+      return fallback;
+    }
+    const outcome = acted as { ok: boolean; summary: string } | null;
+    return outcome
+      ? { id: req.id, ok: outcome.ok, summary: outcome.summary, data: { escalated: true } }
+      : fallback;
+  };
+
   // Every completed execution flows through this wrapper (the /api/tools route
   // AND the brain-chat executeTool callback both call it), so one optional hook
   // sees every bridge tool run — voice, Console and brain-initiated alike.
   // Never throws, never alters the result.
-  const executeToolWithHook = async (req: ToolRequest): Promise<ToolResult> => {
-    const result = await executeTool(req);
+  const executeToolWithHook = async (req: ToolRequest, allowEscalation = true): Promise<ToolResult> => {
+    let result = await executeTool(req);
+    if (
+      allowEscalation &&
+      !result.ok &&
+      (req.tool === 'launch_app' || req.tool === 'open_any_app') &&
+      (/^Unknown app /i.test(result.summary) || /could not find an app called/i.test(result.summary))
+    ) {
+      result = await escalateUnknownApp(req, result);
+    }
     if (deps.onToolExecuted) {
       try {
         deps.onToolExecuted(req.tool, result);
@@ -275,6 +319,11 @@ export function createBridgeApp(deps: BridgeDeps): Express {
     res.json({ ok: true, service: 'mitra-bridge', mock: bolnaKeys(env) === null });
   });
 
+  // Media-word heuristic for bare-search routing: "search avengers doomsday
+  // trailer" reads as YouTube; "search rust vs go" reads as the web.
+  const MEDIA_SEARCH_RE =
+    /\b(trailer|teaser|song|music|video|movie|film|episode|scene|lyrics|playlist|cover|remix|official)\b/i;
+
   // ---- fast decision tier (docs/DECISION_TIER_PLAN.md §1) ----
   // POST /api/brain/route {text} → {tool?, args?, confidence, via}:
   //   tier 1  deterministic parseIntent (instant, args via intentToTool) → via:'deterministic'
@@ -298,15 +347,18 @@ export function createBridgeApp(deps: BridgeDeps): Express {
         res.json({ tool: mapped.tool, args: mapped.args, confidence: 1, via: 'deterministic' });
         return;
       }
+      // Bare "search X" is pickArgs-only while Laya is UP (it decides youtube
+      // vs web), but when the sidecar is down — or it names a tool whose args
+      // no regex can extract — a bare search must still DO something. Media
+      // words (trailer/song/movie…) read as YouTube intent; everything else
+      // is a plain web search.
+      const bareToolFor = (t: string): ToolName =>
+        MEDIA_SEARCH_RE.test(t) ? 'youtube_search' : 'web_search';
       const decision = await routeViaLaya(text, { fetchImpl: layaFetch, layaUrl, timeoutMs: routeTimeoutMs });
       if (!decision.tool) {
-        // Sidecar down (fresh boot — laya-serve is not a service) or it passed:
-        // bare "search X" is pickArgs-only while Laya is UP (it may prefer
-        // youtube_search), but dropping the utterance to chat when it is DOWN
-        // made spoken searches do nothing. Answer with a plain web search.
         const bare = bareSearchQuery(text);
         if (bare) {
-          res.json({ tool: 'web_search', args: { query: bare }, confidence: 0.6, via: 'deterministic' });
+          res.json({ tool: bareToolFor(text), args: { query: bare }, confidence: 0.6, via: 'deterministic' });
           return;
         }
         res.json({ confidence: decision.confidence, via: 'none' });
@@ -320,7 +372,12 @@ export function createBridgeApp(deps: BridgeDeps): Express {
         // query before giving the utterance up to chat.
         const bare = bareSearchQuery(text);
         if (bare) {
-          res.json({ tool: 'web_search', args: { query: bare }, confidence: decision.confidence, via: 'deterministic' });
+          res.json({
+            tool: bareToolFor(text),
+            args: { query: bare },
+            confidence: decision.confidence,
+            via: 'deterministic',
+          });
           return;
         }
         res.json({ confidence: decision.confidence, via: 'none' });
@@ -441,14 +498,12 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       // ACL at the HTTP edge so denials surface as 403 and never reach execution;
       // the dispatcher re-checks internally (defense in depth).
       const decision = checkPermission(name, settings().permissions);
-      console.log(`[mitra:DEBUG] tool=${name} perms=${JSON.stringify(settings().permissions)} decision=${JSON.stringify(decision)}`);
       if (!decision.allowed) {
         res.status(403).json({ id, ok: false, summary: decision.reason ?? 'Permission denied' });
         return;
       }
 
       const result = await executeToolWithHook({ id, tool: name, args });
-      console.log(`[mitra:DEBUG] tool=${name} executeTool resolved`);
       res.json(result);
     } catch (err) {
       res

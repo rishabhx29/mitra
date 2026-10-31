@@ -15,6 +15,7 @@ import {
   chatWithBrain,
   chooseOllamaModel,
   mockConversationalReply,
+  parseAction,
   parseOllamaTags,
   personaSystemPrompt,
   pickBrain,
@@ -22,6 +23,28 @@ import {
   type BrainFetchLike,
   type ChatMessage,
 } from './brain';
+
+describe('parseAction — nested args (balanced scanning)', () => {
+  it('parses nested-args JSON the old regex truncated ({"args":{"url":…}})', () => {
+    const text = '{"tool":"open_url","args":{"url":"https://animejs.com"}}';
+    expect(parseAction(text, ['open_url'])).toEqual({
+      tool: 'open_url',
+      args: { url: 'https://animejs.com' },
+    });
+  });
+
+  it('ignores prose around the action and picks the allowed tool', () => {
+    const text = 'Sure! {"tool":"youtube_search","args":{"query":"doom trailer"}} hope that helps';
+    expect(parseAction(text, ['youtube_search', 'open_url'])).toEqual({
+      tool: 'youtube_search',
+      args: { query: 'doom trailer' },
+    });
+  });
+
+  it('still refuses tools outside the allowed list', () => {
+    expect(parseAction('{"tool":"open_url","args":{"url":"https://x.dev"}}', ['web_search'])).toBeNull();
+  });
+});
 
 // ---- fakes (pattern: bridge.test.ts's capturing fetch) ----
 

@@ -222,16 +222,57 @@ export function buildToolSystemPrompt(language: 'en' | 'hi', tools: readonly str
     '\n{"tool":"<tool-name>","args":{...}}' +
     '\nChoose args that fit the tool (e.g. notion_add_todo takes {"text":"..."}; launch_app takes {"alias":"app name"}; app_task takes {"app":"notepad","content":"..."}; open_url takes {"url":"..."}; youtube_search takes {"query":"..."}; web_search takes {"query":"..."}; run_opencode_task takes {"prompt":"..."}; open_any_app/close_app take {"name":"app name"}; set_reminder takes {"minutes":N,"text":"..."}; workspace_mode takes {"name":"coding|gaming|study|chill"}).' +
     '\nComposite requests: "open <app> and write/type <content>" must use app_task (or run_opencode_task when the app is opencode) — NEVER launch_app.' +
+    '\nSEMANTIC RULES (infer intent — do not match words literally):' +
+    '\n- "open <name>" where <name> is a website, product or library rather than an installed app (e.g. animejs, bolna, react) → use open_url with its https URL (https://animejs.com, https://bolna.ai, https://react.dev).' +
+    '\n- "search <query>" about movies, trailers, songs or videos → youtube_search; about facts, docs, code or products → web_search.' +
     '\nIf no tool fits, or information is missing, answer conversationally instead.'
   );
+}
+
+/**
+ * Extract every BALANCED top-level {...} block (string-aware, escape-aware).
+ * The old `\{[^{}]*\}` regex truncated at the first `}` — which for ANY tool
+ * with nested args ({"args":{"url":…}}) produced invalid JSON and silently
+ * killed the action. Balanced scanning handles arbitrary nesting.
+ */
+export function balancedJsonObjects(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === '}') {
+      if (depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start >= 0) {
+          out.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /** Strict-ish action extraction: first JSON object with a valid "tool" string. */
 export function parseAction(text: string, allowed: readonly string[]): { tool: string; args: Record<string, unknown> } | null {
   if (!text) return null;
-  const matches = text.match(/\{[^{}]*\}/g);
-  if (!matches) return null;
-  for (const candidate of matches) {
+  for (const candidate of balancedJsonObjects(text)) {
     try {
       const obj = JSON.parse(candidate) as { tool?: unknown; args?: unknown };
       if (typeof obj['tool'] === 'string') {

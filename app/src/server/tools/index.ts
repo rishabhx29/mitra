@@ -44,6 +44,11 @@ export const KNOWN_TOOLS: readonly ToolName[] = [
   'agenda_today',
   // Composite: open an app AND type content into it (voice intents.ts app_task).
   'app_task',
+  // Generic app control + web search (§2b) — the brain advertises these too,
+  // so "search X" / "close chrome" from the LLM tier actually route.
+  'open_any_app',
+  'close_app',
+  'web_search',
 ];
 
 export function isKnownTool(name: string): name is ToolName {

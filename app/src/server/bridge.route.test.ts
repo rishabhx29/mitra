@@ -161,6 +161,22 @@ describe('POST /api/brain/route — tier 2: the optional Laya sidecar', () => {
     expect(yt.json).toMatchObject({ tool: 'youtube_search', via: 'deterministic' });
   });
 
+  it('media words in a bare search read as YouTube intent ("search avengers doomsday trailer")', async () => {
+    const laya = fakeLaya(() => {
+      throw new Error('ECONNREFUSED');
+    });
+    const h = await start({ settings: () => makeSettings(), env: {}, fetchImpl: laya });
+    const { json } = await postRoute(h.port, { text: 'search avengers doomsday trailer' });
+    expect(json).toMatchObject({
+      tool: 'youtube_search',
+      args: { query: 'avengers doomsday trailer' },
+      via: 'deterministic',
+    });
+    // non-media queries stay web
+    const web = await postRoute(h.port, { text: 'search rust vs go' });
+    expect(web.json).toMatchObject({ tool: 'web_search' });
+  });
+
   it('sidecar 404 / garbage shape → via:"none", never a 5xx', async () => {
     const h404 = await start({
       settings: () => makeSettings(),
