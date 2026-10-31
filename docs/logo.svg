@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Mitra logo">
+  <defs>
+    <radialGradient id="orb" cx="36%" cy="30%" r="85%">
+      <stop offset="0%" stop-color="#ff9a66"/>
+      <stop offset="55%" stop-color="#ff5a2b"/>
+      <stop offset="100%" stop-color="#b32a10"/>
+    </radialGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1c1c20"/>
+      <stop offset="100%" stop-color="#0f0f12"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <ellipse cx="256" cy="256" rx="198" ry="64" stroke="#ff5a2b" stroke-width="7" fill="none" opacity="0.35" transform="rotate(-16 256 256)"/>
+  <ellipse cx="256" cy="256" rx="176" ry="52" stroke="#ff8a3d" stroke-width="5" fill="none" opacity="0.25" transform="rotate(14 256 256)"/>
+  <circle cx="256" cy="256" r="148" fill="url(#orb)"/>
+  <path d="M128 292 C 200 208, 316 344, 398 252" stroke="#ffc09a" stroke-width="20" fill="none" stroke-linecap="round" opacity="0.9"/>
+  <path d="M138 342 C 218 272, 326 392, 402 306" stroke="#ff7a45" stroke-width="13" fill="none" stroke-linecap="round" opacity="0.65"/>
+</svg>

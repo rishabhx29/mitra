@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.svg" width="128" alt="Mitra logo" />
+
 # Mitra
 
 **Your desktop, on voice.** A Jarvis-style assistant for Windows that runs **fully offline** — no cloud, no API keys, no cost.
@@ -20,6 +22,14 @@
 Press **`Ctrl+Shift+Space`** anywhere → a Siri-style orb appears → speak in **English, Hindi, or Hinglish** → Mitra understands, and — with your permission — *actually does the thing*: opens apps and websites, searches YouTube and the web, writes into Notepad, adds to-dos, drives the **opencode** coding agent, sets reminders, and answers conversationally on a **local LLM**.
 
 Built for the **Bolna Buildathon**. Every flow runs with zero API keys — the voice brain is Vosk (on-device STT), the reasoning brain is Ollama/qwen with a Laya fast-decision tier, and the voice is your OS.
+
+## See it
+
+| The summon orb — press `Ctrl+Shift+Space` anywhere | The Console — chat, tool cards, your VRM persona |
+| --- | --- |
+| ![Summon orb](docs/screenshots/overlay-orb.png) | ![Console](docs/screenshots/console.png) |
+| **Settings home** — everything one glance away | **Capabilities** — every tool, gated by you |
+| ![Settings](docs/screenshots/home.png) | ![Capabilities](docs/screenshots/capabilities.png) |
 
 ## Install
 
