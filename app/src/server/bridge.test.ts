@@ -135,6 +135,76 @@ describe('POST /api/session', () => {
   });
 });
 
+describe('POST /api/tools/:name — unknown-app tiers', () => {
+  const unknownTool = async (req: { id: string; tool: string; args: Record<string, unknown> }) => {
+    if (req.tool === 'launch_app') {
+      return { id: req.id, ok: false, summary: 'Unknown app "animejs".' };
+    }
+    return { id: req.id, ok: true, summary: `Opened https://animejs.com in your browser` };
+  };
+
+  it('tier 1: DNS-verified site guess opens instantly, no brain call', async () => {
+    const calls: FetchCall[] = [];
+    const fetchImpl = (async (url: string, init?: { method?: string; body?: string }) => {
+      calls.push({ url, init });
+      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const executed: Array<{ tool: string; args: Record<string, unknown> }> = [];
+    const executeTool = async (req: { id: string; tool: string; args: Record<string, unknown> }) => {
+      executed.push({ tool: req.tool, args: req.args });
+      if (req.tool === 'launch_app') {
+        return { id: req.id, ok: false, summary: 'Unknown app "animejs".' };
+      }
+      return { id: req.id, ok: true, summary: 'Opened https://animejs.com in your browser' };
+    };
+    const h = await start({
+      settings: () => makeSettings(),
+      env: {},
+      fetchImpl,
+      resolveHost: async (host) => host === 'animejs.com',
+      executeTool: executeTool as unknown as BridgeDeps['executeTool'],
+    });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/tools/launch_app`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 't1', tool: 'launch_app', args: { alias: 'animejs' } }),
+    });
+    const body = (await res.json()) as { ok: boolean; summary: string };
+    expect(body.ok).toBe(true);
+    expect(body.summary).toContain('animejs.com');
+    expect(executed.some((e) => e.tool === 'open_url')).toBe(true);
+    expect(calls.some((c) => c.url.includes('/api/generate'))).toBe(false); // brain never needed
+  });
+
+  it('tier 3: brain offline + DNS miss → web-search guarantee (always lands somewhere)', async () => {
+    const fetchImpl = (async () => ({ ok: false, status: 404, json: async () => ({}) }) as unknown as Response) as unknown as typeof fetch;
+    const executed: Array<{ tool: string; args: Record<string, unknown> }> = [];
+    const executeTool = async (req: { id: string; tool: string; args: Record<string, unknown> }) => {
+      executed.push({ tool: req.tool, args: req.args });
+      if (req.tool === 'launch_app') {
+        return { id: req.id, ok: false, summary: 'Unknown app "flubbertron".' };
+      }
+      return { id: req.id, ok: true, summary: 'Searching the web' };
+    };
+    const h = await start({
+      settings: () => makeSettings(),
+      env: {},
+      fetchImpl,
+      resolveHost: async () => false,
+      executeTool: executeTool as unknown as BridgeDeps['executeTool'],
+    });
+    const res = await fetch(`http://127.0.0.1:${h.port}/api/tools/launch_app`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 't2', tool: 'launch_app', args: { alias: 'flubbertron' } }),
+    });
+    const body = (await res.json()) as { ok: boolean; summary: string };
+    expect(body.ok).toBe(true);
+    expect(body.summary).toContain('searched the web');
+    expect(executed.some((e) => e.tool === 'web_search' && e.args['query'] === 'flubbertron')).toBe(true);
+  });
+});
+
 describe('POST /api/tools/:name — unknown-app brain escalation', () => {
   it('"open animejs" (unknown app) escalates to the brain → open_url executes', async () => {
     const calls: FetchCall[] = [];
@@ -164,6 +234,7 @@ describe('POST /api/tools/:name — unknown-app brain escalation', () => {
       settings: () => makeSettings(),
       env: {},
       fetchImpl,
+      resolveHost: async () => false, // DNS tier off — exercise the brain tier
       executeTool: executeTool as unknown as BridgeDeps['executeTool'],
     });
     const res = await fetch(`http://127.0.0.1:${h.port}/api/tools/launch_app`, {

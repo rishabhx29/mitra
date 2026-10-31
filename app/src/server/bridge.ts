@@ -93,6 +93,12 @@ export interface BridgeDeps {
    * a broken reporter can never break a tool.
    */
   onToolExecuted?: (tool: ToolName, result: ToolResult) => void;
+  /**
+   * Unknown-app website probe ("open animejs" with no installed app): resolves
+   * whether `<name>.com` exists as a host. Default = real DNS lookup (1s cap).
+   * Tests inject false/true to stay offline.
+   */
+  resolveHost?: (host: string) => Promise<boolean>;
   log?: (msg: string) => void;
 }
 
@@ -205,6 +211,54 @@ export function createBridgeApp(deps: BridgeDeps): Express {
   // AND the brain-chat executeTool callback both call it), so one optional hook
   // sees every bridge tool run — voice, Console and brain-initiated alike.
   // Never throws, never alters the result.
+  //
+  // Unknown "open X" resolves through THREE tiers so EVERY name lands somewhere:
+  //   1. DNS probe — `<name>.com` (dash-normalized) is a live host → open it
+  //      instantly (animejs → https://animejs.com). No LLM needed, ~100ms.
+  //   2. Brain escalation — the tool-calling LLM infers the right domain
+  //      (bolna → https://bolna.ai) or picks another tool entirely.
+  //   3. Web search — guarantee: the user always gets the name looked up.
+  const defaultResolveHost = async (host: string): Promise<boolean> => {
+    try {
+      const dns = (await import('node:dns/promises')) as typeof import('node:dns/promises');
+      await Promise.race([dns.lookup(host), new Promise((_, rej) => setTimeout(() => rej(new Error('dns-timeout')), 1000))]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const resolveHost = deps.resolveHost ?? defaultResolveHost;
+  const executeUnknownAppTiers = async (req: ToolRequest, fallback: ToolResult): Promise<ToolResult> => {
+    const raw = String(req.args['alias'] ?? req.args['name'] ?? '').trim();
+    if (raw) {
+      // Tier 1: instant website guess, DNS-verified so garbage names never open.
+      const host = `${raw.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.com`;
+      if (await resolveHost(host)) {
+        const opened = await executeTool({
+          id: `site-${Date.now()}`,
+          tool: 'open_url',
+          args: { url: `https://${host}` },
+        });
+        if (opened.ok) return { ...opened, summary: `${opened.summary} (${raw} → https://${host})` };
+      }
+      // Tier 2: the LLM infers the right domain / tool.
+      const escalated = await escalateUnknownApp(req, fallback);
+      if (escalated !== fallback) return escalated;
+      // Tier 3: guarantee — search the web for the name.
+      const searched = await executeTool({
+        id: `search-${Date.now()}`,
+        tool: 'web_search',
+        args: { query: raw },
+      });
+      if (searched.ok) {
+        return {
+          ...searched,
+          summary: `Couldn't find an app or site called "${raw}" — searched the web instead`,
+        };
+      }
+    }
+    return fallback;
+  };
   const executeToolWithHook = async (req: ToolRequest, allowEscalation = true): Promise<ToolResult> => {
     let result = await executeTool(req);
     if (
@@ -213,7 +267,7 @@ export function createBridgeApp(deps: BridgeDeps): Express {
       (req.tool === 'launch_app' || req.tool === 'open_any_app') &&
       (/^Unknown app /i.test(result.summary) || /could not find an app called/i.test(result.summary))
     ) {
-      result = await escalateUnknownApp(req, result);
+      result = await executeUnknownAppTiers(req, result);
     }
     if (deps.onToolExecuted) {
       try {
