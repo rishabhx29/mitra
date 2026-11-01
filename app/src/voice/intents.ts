@@ -37,6 +37,12 @@ const LANG_EN_RE =
 //     Checked EARLY (right after stop/language) so the console's own hint chip
 //     ("who are you?") always gets a real self-introduction instead of the
 //     clarify fallback when the chat brain is slow or absent.
+// Friday port (docs/FRIDAY_PORT.md): spoken news briefs.
+const WORLD_NEWS_RE =
+  /(?:what(?:'s| is)?\s+(?:going\s+on|happening|the\s+news)|any\s+news|world\s+(?:news|update)|news\s+(?:batao|sunao|dho)|brief\s+me|catch\s+me\s+up|top\s+headlines|headlines\s+batao)/;
+const FINANCE_NEWS_RE =
+  /(?:market|finance|stock|economy)(?:\s+(?:news|update|batao))?\s*(?:kya\s+hai)?|(?:finance|markets?)\s+(?:news|update)|aaj\s+(?:market|bajarr?)\s+kaisa/;
+
 const IDENTITY_RE =
   /\b(?:who\s+are\s+you|what\s+can\s+you\s+do|what(?:'s|\s+is)\s+your\s+name|tum\s+kaun\s+ho|aap\s+kaun\s+ho|tumhara\s+naam|aapka\s+naam)\b|तुम\s*कौन\s*हो|आप\s*कौन\s*हो|तुम्हारा\s*नाम|आपका\s*नाम/;
 
@@ -587,6 +593,8 @@ export function parseIntent(raw: string, modes: WorkspaceMode[] = []): MockInten
 
   // Identity questions answer conversationally (no tool) — before everything
   // else so the console hint chip never degrades to the clarify fallback.
+  if (WORLD_NEWS_RE.test(text)) return { kind: 'world_news' };
+  if (FINANCE_NEWS_RE.test(text)) return { kind: 'finance_news' };
   if (IDENTITY_RE.test(text)) return { kind: 'identity' };
 
   const oc = firstCapture(text, OPENCODE_RES);
@@ -671,6 +679,10 @@ export function intentToTool(
       return { tool: 'launch_app', args: { alias: intent.alias } };
     case 'app_task':
       return { tool: 'app_task', args: { app: intent.app, content: intent.content } };
+    case 'world_news':
+      return { tool: 'get_world_news', args: {} };
+    case 'finance_news':
+      return { tool: 'get_finance_news', args: {} };
     case 'identity':
       // Conversational — answered from i18n by the caller (like stop/language).
       return null;

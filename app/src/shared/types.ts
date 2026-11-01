@@ -25,6 +25,8 @@ export type ToolName =
   | 'open_any_app'
   | 'close_app'
   | 'web_search'
+  | 'get_world_news'
+  | 'get_finance_news'
   // Composite app task: open an app AND write/type specific content into it
   // ("open notepad and write hello") — launch + clipboard paste (win32).
   | 'app_task';

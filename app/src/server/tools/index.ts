@@ -19,6 +19,7 @@ import { createMemoryTool } from './memory';
 import { createStatusBriefingTool, type OsLike, type PowerMonitorLike } from './status';
 import { createNoteNotepadTool } from './notepad';
 import { openAnyApp, closeApp, webSearch } from './genericApps';
+import { createNewsTool } from './news';
 import { buildAppIndex, matchApp, type AppEntry, type AppIndex } from './appIndex';
 import { createYoutubeSearchTool } from './youtube';
 import { createAgendaTodayTool } from './agenda';
@@ -49,6 +50,9 @@ export const KNOWN_TOOLS: readonly ToolName[] = [
   'open_any_app',
   'close_app',
   'web_search',
+  // Friday port (docs/FRIDAY_PORT.md): spoken news briefs.
+  'get_world_news',
+  'get_finance_news',
 ];
 
 export function isKnownTool(name: string): name is ToolName {
@@ -212,6 +216,11 @@ function buildHandler(
             await deps.exec(`start "" "${url}"`);
           }
         });
+    // Friday port (docs/FRIDAY_PORT.md): spoken news briefs + monitor follow-through.
+    case 'get_world_news':
+      return createNewsTool('world', { exec: deps.exec, platform });
+    case 'get_finance_news':
+      return createNewsTool('finance', { exec: deps.exec, platform });
   }
 }
 

@@ -226,6 +226,8 @@ export function buildToolSystemPrompt(language: 'en' | 'hi', tools: readonly str
     '\n- "open <name>" where <name> is a website, product or library rather than an installed app (e.g. animejs, bolna, react) → use open_url with its https URL (https://animejs.com, https://bolna.ai, https://react.dev).' +
     '\n- "search <query>" about movies, trailers, songs or videos → youtube_search; about facts, docs, code or products → web_search.' +
     '\n- NEVER call open_url without a complete https URL in args.url (never empty, never a bare name); when asked to search, prefer youtube_search/web_search over open_url.' +
+    '\n- get_world_news/get_finance_news take no arguments. After giving a 3-4 sentence spoken news brief, say "Let me open the world monitor for you." and immediately call open_url with https://www.worldmonitor.app/ (finance: https://finance.worldmonitor.app/).' +
+    '\n- You are a VOICE: spoken answers are 2-4 short sentences, natural contractions, NO lists, NO markdown, NO raw URLs, and NEVER say tool names aloud.' +
     '\nIf no tool fits, or information is missing, answer conversationally instead.'
   );
 }

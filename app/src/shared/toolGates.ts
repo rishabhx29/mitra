@@ -36,6 +36,9 @@ export const TOOL_GATES: Readonly<Record<ToolName, ToolGate>> = {
   // board → notion (same gate as the tool that writes it).
   note_notepad: 'launcher',
   youtube_search: 'browser',
+  // Friday port: spoken news briefs open the browser-side world monitor → browser.
+  get_world_news: 'browser',
+  get_finance_news: 'browser',
   agenda_today: 'notion',
   // app_task opens an app (launch_app semantics) and types into it → launcher.
   app_task: 'launcher',

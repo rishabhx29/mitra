@@ -232,7 +232,7 @@ function fmt(template: string, vars: Record<string, string>): string {
  * requested content into it). (No client-side tool registry exists —
  * the authoritative list lives behind the bridge's isKnownTool.)
  */
-export const TOOL_COUNT = 14;
+export const TOOL_COUNT = 16;
 
 export function buildBootLines(status: BrainStatus, lang: Lang): string[] {
   const brainLabel =

@@ -48,6 +48,8 @@ export const LAYA_TOOL_OPTIONS: readonly string[] = [
   'open_any_app',
   'close_app',
   'web_search',
+  'get_world_news',
+  'get_finance_news',
   'none',
 ];
 
@@ -70,6 +72,8 @@ export const LAYA_TOOL_CRITERIA: Readonly<Record<string, string>> = {
   open_any_app: 'user wants to open any application by name',
   close_app: 'user wants to close or quit a running application',
   web_search: 'user wants to look up general information, docs or facts on the web (not a video)',
+  get_world_news: 'user asks for the news, headlines, a world brief, or what is happening',
+  get_finance_news: 'user asks about the markets, finance or the economy',
   none: 'general conversation, no tool',
 };
 
@@ -89,6 +93,8 @@ const LAYA_CHOICE_TO_TOOL: Readonly<Record<string, ToolName>> = {
   open_any_app: 'open_any_app',
   close_app: 'close_app',
   web_search: 'web_search',
+  get_world_news: 'get_world_news',
+  get_finance_news: 'get_finance_news',
 };
 
 /** Structural subset of Response — keeps tests free of DOM/lib.dom types. */
@@ -306,6 +312,9 @@ export function pickArgs(tool: ToolName, text: string): Record<string, unknown> 
     }
     case 'agenda_today':
     case 'lock_workstation':
+    // News briefs take no arguments — Laya names them, we run them.
+    case 'get_world_news':
+    case 'get_finance_news':
       return {};
     case 'close_app': {
       // Mirrors intents.CLOSE_APP_RES without the stop-forms (handled above).

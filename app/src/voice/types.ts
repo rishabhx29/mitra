@@ -42,6 +42,8 @@ export type MockIntent =
   | { kind: 'app_task'; app: string; content: string }
   // Identity question ("who are you?") — answered conversationally, no tool.
   | { kind: 'identity' }
+  | { kind: 'world_news' }
+  | { kind: 'finance_news' }
   | { kind: 'stop' }
   | { kind: 'language_switch'; language: 'en' | 'hi' };
 

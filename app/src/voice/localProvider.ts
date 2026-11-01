@@ -118,6 +118,12 @@ export class LocalVoiceProvider implements VoiceProvider {
    * cooldown so trailing speaker audio never re-enters the recognizer.
    */
   private micGated = false;
+  /**
+   * Per-session conversation memory — the Friday magic: follow-ups like
+   * "and in finance?" work because the brain sees the prior turns.
+   * Capped so a long session can never balloon the prompt.
+   */
+  private history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   private micResumeTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly d: Required<Pick<LocalProviderDeps, 'bridgeBase' | 'fetchImpl' | 'tts' | 'log'>> &
     LocalProviderDeps;
@@ -262,6 +268,7 @@ export class LocalVoiceProvider implements VoiceProvider {
 
   async stop(): Promise<void> {
     this.disposed = true;
+    this.history = [];
     this.stopEnvelope();
     this.d.tts.cancel();
     this.micGated = false;
@@ -301,6 +308,7 @@ export class LocalVoiceProvider implements VoiceProvider {
   private async handle(raw: string): Promise<void> {
     if (!raw || this.disposed) return;
     this.emit({ role: 'user', text: raw, ts: Date.now() });
+    const history = this.history.slice();
     this.setSessionState('thinking');
     await this.delay(400 + Math.floor(Math.random() * 400));
     if (this.disposed) return;
@@ -331,8 +339,10 @@ export class LocalVoiceProvider implements VoiceProvider {
         timeoutMs: ROUTE_TIMEOUT_MS,
       });
       if (this.disposed) return;
-      reply = routed ? await this.runTool(routed.tool, routed.args) : await this.chat(raw);
+      reply = routed ? await this.runTool(routed.tool, routed.args) : await this.chat(raw, history);
     }
+    this.history.push({ role: 'user', content: raw }, { role: 'assistant', content: reply });
+    if (this.history.length > 12) this.history = this.history.slice(-12);
     await this.speak(reply);
   }
 
@@ -354,12 +364,12 @@ export class LocalVoiceProvider implements VoiceProvider {
     }
   }
 
-  private async chat(text: string): Promise<string> {
+  private async chat(text: string, history: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<string> {
     try {
       const res = await this.d.fetchImpl(`${this.d.bridgeBase}/api/brain/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: text }], language: this.lang }),
+        body: JSON.stringify({ messages: [...history, { role: 'user', content: text }], language: this.lang }),
         signal: AbortSignal.timeout(12000),
       });
       const body = (await res.json().catch(() => null)) as { text?: string } | null;

@@ -162,6 +162,49 @@ describe('LocalVoiceProvider.start (injected model + mic)', () => {
     expect(streamStop).toBeGreaterThan(0);
   });
 
+  it('sends prior conversation turns to the brain chat (Friday-style follow-ups)', async () => {
+    const calls: Array<{ url: string; body?: unknown }> = [];
+    const fetchImpl = (async (url: string, init?: { body?: string }) => {
+      calls.push({ url, body: init?.body ? JSON.parse(init.body) : undefined });
+      if (url.includes('/api/tools/')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, summary: 'Added "chai"' }) } as unknown as Response;
+      }
+      if (url.endsWith('/api/brain/chat')) {
+        return { ok: true, status: 200, json: async () => ({ brain: 'ollama', text: 'Sure thing, boss.' }) } as unknown as Response;
+      }
+      if (url.endsWith('/api/models/download')) {
+        return { ok: true, status: 200, json: async () => ({ lang: 'en-us', state: 'ready', bytes: 1, approxMb: 40 }) } as unknown as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const tts = fakeTts();
+    const model = modelFake();
+    const p = new LocalVoiceProvider({
+      fetchImpl,
+      tts,
+      fastTimers: true,
+      getLanguage: () => 'en-us',
+      createModel: model.createModel,
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream },
+    });
+    await p.start();
+    const listeners = model.recognizers[0]!.listeners;
+
+    listeners[0]?.({ result: { text: 'add chai to my todo list' } });
+    await new Promise((r) => setTimeout(r, 40));
+    listeners[0]?.({ result: { text: 'who are you?' } });
+    await new Promise((r) => setTimeout(r, 40));
+
+    const chatCalls = calls.filter((c) => c.url.endsWith('/api/brain/chat'));
+    expect(chatCalls.length).toBe(1);
+    const msgs = (chatCalls[0]!.body as { messages: Array<{ role: string; content: string }> }).messages;
+    // The prior tool exchange (user turn + agent summary) rides along as context.
+    expect(msgs.some((m) => m.role === 'user' && m.content.includes('chai'))).toBe(true);
+    expect(msgs.some((m) => m.role === 'assistant' && m.content.includes('chai'))).toBe(true);
+    expect(msgs[msgs.length - 1]!.content).toBe('who are you?');
+    await p.stop();
+  });
+
   it('gates the mic while the agent speaks and resumes after (never transcribes its own voice)', async () => {
     const { fetchImpl } = bridgeFake();
     // TTS that holds the utterance open until the test releases it.
